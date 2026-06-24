@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Issues rules
+    match /issues/{issueId} {
+      allow read, write: if true;
+    }
+
+    // Campaigns rules
+    match /campaigns/{campaignId} {
+      allow read, write: if true;
+    }
+
+    // Profiles rules
+    match /profiles/{profileId} {
+      allow read, write: if true;
+    }
+  }
+}

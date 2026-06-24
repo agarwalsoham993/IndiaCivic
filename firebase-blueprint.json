@@ -1,0 +1,137 @@
+{
+  "entities": {
+    "Issue": {
+      "title": "Issue",
+      "description": "Represents a reported civic issue.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "locationName": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "imageUrl": {
+          "type": "string"
+        },
+        "isAnonymous": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "trackingId": {
+          "type": "string"
+        },
+        "virtualAssetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "title",
+        "description",
+        "latitude",
+        "longitude"
+      ]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "Represents a community cleaning/awareness campaign.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "creator": {
+          "type": "string"
+        },
+        "targetPoints": {
+          "type": "number"
+        },
+        "currentPoints": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "description"
+      ]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents a citizen or organization user profile.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "civicScore": {
+          "type": "number"
+        },
+        "totalPoints": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    }
+  },
+  "firestore": {
+    "/issues/{issueId}": {
+      "schema": "Issue",
+      "description": "Collection of all civic issues."
+    },
+    "/campaigns/{campaignId}": {
+      "schema": "Campaign",
+      "description": "Collection of all active campaigns."
+    },
+    "/profiles/{profileId}": {
+      "schema": "UserProfile",
+      "description": "Collection of user/organization profiles."
+    }
+  }
+}

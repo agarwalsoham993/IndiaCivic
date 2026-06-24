@@ -1,0 +1,6 @@
+{
+  "name": "IndiaCivic",
+  "description": "Hyperlocal civic-tech platform where citizens report, verify, fund, and resolve neighborhood problems with photo/video proof, geo-tagging, and community voting.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
