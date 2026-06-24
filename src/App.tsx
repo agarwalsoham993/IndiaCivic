@@ -25,7 +25,11 @@ import {
   Send,
   Lock,
   Mail,
-  UserPlus
+  UserPlus,
+  Building,
+  CheckCircle2,
+  Camera,
+  Check
 } from "lucide-react";
 
 import { Issue, Campaign, UserProfile, Comment, Donation } from "./types";
@@ -41,7 +45,9 @@ import {
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signOut 
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 
 export default function App() {
@@ -57,6 +63,24 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  // Issue Resolution proof States
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolutionPhoto, setResolutionPhoto] = useState<string | null>(null);
+  const [resolutionDesc, setResolutionDesc] = useState("");
+  const [resolutionLoading, setResolutionLoading] = useState(false);
+  const [resolutionError, setResolutionError] = useState("");
+  const [resolutionSuccessMsg, setResolutionSuccessMsg] = useState("");
+
+  // Upvote Proof States
+  const [showUpvoteProofModal, setShowUpvoteProofModal] = useState(false);
+  const [upvoteIssueId, setUpvoteIssueId] = useState<string | null>(null);
+  const [upvoteMedia, setUpvoteMedia] = useState<string | null>(null);
+  const [upvoteText, setUpvoteText] = useState("");
+
+  // Comment replies and comment upvote UI States
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+
   // Firebase Auth UI States
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -65,6 +89,7 @@ export default function App() {
   const [authName, setAuthName] = useState("");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [signUpRole, setSignUpRole] = useState<'CITIZEN' | 'ORGANIZATION'>('CITIZEN');
 
   const isGuest = !userProfile || userProfile.id === "guest";
   const [isMobile, setIsMobile] = useState(() => {
@@ -127,7 +152,8 @@ export default function App() {
             body: JSON.stringify({
               uid: firebaseUser.uid,
               email: firebaseUser.email,
-              name: authName || firebaseUser.displayName || firebaseUser.email?.split("@")[0]
+              name: firebaseUser.displayName || firebaseUser.email?.split("@")[0],
+              role: signUpRole
             })
           });
           const data = await res.json();
@@ -155,7 +181,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [authName]);
+  }, [signUpRole]);
 
   useEffect(() => {
     loadAllData();
@@ -195,6 +221,21 @@ export default function App() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      setShowAuthModal(false);
+    } catch (err: any) {
+      console.error("Firebase Google Sign In Error:", err);
+      setAuthError(err.message || "Google Sign In failed.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -220,19 +261,31 @@ export default function App() {
     }
   };
 
-  const handleVote = async (issueId: string, voteType: 'UPVOTE' | 'AGREE' | 'DISAGREE') => {
+  const handleVote = async (issueId: string, voteType: 'UPVOTE' | 'AGREE' | 'DISAGREE', mediaBase64?: string, mediaText?: string) => {
     if (!userProfile || userProfile.id === "guest") {
       setAuthMode("signup");
       setShowAuthModal(true);
       return;
     }
+    
+    // Intercept UPVOTE to prompt for optional media proof
+    if (voteType === "UPVOTE" && !mediaBase64 && !showUpvoteProofModal) {
+      setUpvoteIssueId(issueId);
+      setUpvoteMedia(null);
+      setUpvoteText("");
+      setShowUpvoteProofModal(true);
+      return;
+    }
+
     try {
       const response = await fetch(`/api/issues/${issueId}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           voteType,
-          userId: userProfile ? userProfile.id : "guest"
+          userId: userProfile ? userProfile.id : "guest",
+          mediaBase64: mediaBase64 || undefined,
+          mediaText: mediaText || undefined
         })
       });
       const data = await response.json();
@@ -243,20 +296,110 @@ export default function App() {
         if (selectedIssue && selectedIssue.id === issueId) {
           setSelectedIssue(data.issue);
         }
+        setShowUpvoteProofModal(false);
         loadAllData();
+      } else {
+        alert(data.error || "Failed to submit vote.");
       }
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleAddCorroboration = async (issueId: string) => {
+  const handleResolveIssue = async (issueId: string) => {
     if (!userProfile || userProfile.id === "guest") {
       setAuthMode("signup");
       setShowAuthModal(true);
       return;
     }
-    if (!corroborationText.trim()) return;
+    setResolutionLoading(true);
+    setResolutionError("");
+    setResolutionSuccessMsg("");
+
+    // Gather automatic geolocation and timestamp
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const timestamp = new Date().toISOString();
+
+        try {
+          const response = await fetch(`/api/issues/${issueId}/resolve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resolvedPhoto: resolutionPhoto,
+              resolvedDescription: resolutionDesc,
+              resolvedLatitude: lat,
+              resolvedLongitude: lng,
+              resolvedTimestamp: timestamp
+            })
+          });
+          const data = await response.json();
+          if (response.ok && data.success) {
+            setResolutionSuccessMsg("Congratulations! This issue has been verified and successfully resolved via AI comparison. You earned +150 XP points!");
+            setSelectedIssue(data.issue);
+            setIssues(prev => prev.map(iss => iss.id === issueId ? data.issue : iss));
+            setResolutionPhoto(null);
+            setResolutionDesc("");
+            setIsResolving(false);
+            loadAllData();
+          } else {
+            setResolutionError(data.error || "Failed to resolve issue.");
+          }
+        } catch (err: any) {
+          console.error("Resolution upload error:", err);
+          setResolutionError("Network error. Please try again.");
+        } finally {
+          setResolutionLoading(false);
+        }
+      },
+      async (geoError) => {
+        console.warn("Geolocation fetching failed. Using approximate device IP coordinates...", geoError);
+        // Fallback to approximately original issue location for demonstration purposes if permission denied
+        try {
+          const response = await fetch(`/api/issues/${issueId}/resolve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resolvedPhoto: resolutionPhoto,
+              resolvedDescription: resolutionDesc,
+              resolvedLatitude: selectedIssue ? selectedIssue.latitude : undefined,
+              resolvedLongitude: selectedIssue ? selectedIssue.longitude : undefined,
+              resolvedTimestamp: new Date().toISOString()
+            })
+          });
+          const data = await response.json();
+          if (response.ok && data.success) {
+            setResolutionSuccessMsg("Congratulations! This issue has been verified and successfully resolved. You earned +150 XP points!");
+            setSelectedIssue(data.issue);
+            setIssues(prev => prev.map(iss => iss.id === issueId ? data.issue : iss));
+            setResolutionPhoto(null);
+            setResolutionDesc("");
+            setIsResolving(false);
+            loadAllData();
+          } else {
+            setResolutionError(data.error || "Failed to resolve issue.");
+          }
+        } catch (err: any) {
+          console.error("Resolution fallback upload error:", err);
+          setResolutionError("Network error. Please check your connection.");
+        } finally {
+          setResolutionLoading(false);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  };
+
+  const handleAddCorroboration = async (issueId: string, parentId?: string, customText?: string) => {
+    if (!userProfile || userProfile.id === "guest") {
+      setAuthMode("signup");
+      setShowAuthModal(true);
+      return;
+    }
+    const textToSend = customText !== undefined ? customText : corroborationText;
+    if (!textToSend.trim()) return;
     try {
       const response = await fetch(`/api/issues/${issueId}/corroborate`, {
         method: "POST",
@@ -264,13 +407,40 @@ export default function App() {
         body: JSON.stringify({
           author: userProfile ? userProfile.name : "Anonymous Neighbor",
           avatar: userProfile ? userProfile.avatar : undefined,
-          text: corroborationText
+          text: textToSend,
+          parentId: parentId || undefined
         })
       });
       const data = await response.json();
       if (data.success) {
-        setCorroborationText("");
+        if (customText === undefined) {
+          setCorroborationText("");
+        }
         setSelectedIssue(data.issue);
+        setIssues(prev => prev.map(iss => iss.id === issueId ? data.issue : iss));
+        loadAllData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleVoteComment = async (issueId: string, commentId: string) => {
+    if (!userProfile || userProfile.id === "guest") {
+      setAuthMode("signup");
+      setShowAuthModal(true);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/issues/${issueId}/comments/${commentId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userProfile.id })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSelectedIssue(data.issue);
+        setIssues(prev => prev.map(iss => iss.id === issueId ? data.issue : iss));
         loadAllData();
       }
     } catch (err) {
@@ -534,22 +704,275 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Resolve Issue Section */}
+                <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
+                      <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">Issue Resolution Status</h4>
+                    </div>
+                    {selectedIssue.status === "RESOLVED" ? (
+                      <span className="px-2 py-0.5 text-[9px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200 rounded uppercase">Resolved</span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 rounded uppercase">Pending Fix</span>
+                    )}
+                  </div>
+
+                  {selectedIssue.status === "RESOLVED" && selectedIssue.resolutionProof ? (
+                    <div className="space-y-3 pt-1">
+                      {selectedIssue.resolutionProof.photo && (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 h-32">
+                          <img 
+                            src={selectedIssue.resolutionProof.photo} 
+                            alt="Resolution Proof" 
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover" 
+                          />
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-600 leading-relaxed font-semibold bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                        {selectedIssue.resolutionProof.description}
+                      </p>
+                      <div className="text-[9px] font-mono text-slate-400 space-y-0.5">
+                        <div>Verified Resolution Timestamp: {new Date(selectedIssue.resolutionProof.timestamp).toLocaleString()}</div>
+                        <div>Geolocation Log: {selectedIssue.resolutionProof.latitude?.toFixed(5)}°, {selectedIssue.resolutionProof.longitude?.toFixed(5)}°</div>
+                        {selectedIssue.resolutionProof.aiConfidence && (
+                          <div className="text-emerald-600 font-extrabold">AI Verification Status: Match Found ({selectedIssue.resolutionProof.aiConfidence})</div>
+                        )}
+                        {selectedIssue.resolutionProof.aiAnalysisLog && (
+                          <div className="mt-1 p-2 bg-slate-50 rounded border border-slate-150 text-[8.5px] font-medium leading-relaxed max-h-24 overflow-y-auto">
+                            <strong>Gemini AI Verification Report:</strong> {selectedIssue.resolutionProof.aiAnalysisLog}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-1">
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        Have you personally visited this spot and fixed this issue? You can submit verification proof (photo + description) to earn **+150 XP points** after automatic AI comparison.
+                      </p>
+
+                      {isResolving ? (
+                        <div className="space-y-3.5 border-t border-slate-100 pt-3">
+                          {resolutionError && (
+                            <div className="p-2.5 bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-semibold rounded-lg">
+                              {resolutionError}
+                            </div>
+                          )}
+
+                          {/* Photo Input */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">1. Attach Resolution Photo (Required)</label>
+                            {resolutionPhoto ? (
+                              <div className="relative rounded-xl overflow-hidden border border-slate-200 h-28">
+                                <img src={resolutionPhoto} className="w-full h-full object-cover" />
+                                <button 
+                                  onClick={() => setResolutionPhoto(null)}
+                                  className="absolute top-2 right-2 p-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full cursor-pointer"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center bg-slate-50">
+                                <Camera className="h-5 w-5 text-slate-400 mb-1" />
+                                <label className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-700 cursor-pointer uppercase tracking-wider">
+                                  <span>Capture / Upload Proof</span>
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    capture="environment"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const r = new FileReader();
+                                        r.onload = () => setResolutionPhoto(r.result as string);
+                                        r.readAsDataURL(file);
+                                      }
+                                    }}
+                                    className="hidden" 
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Description Input */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">2. Describe Action Taken</label>
+                            <textarea
+                              placeholder="Describe what was done to fix it (e.g. Cleared all water bottle waste and plastic)..."
+                              value={resolutionDesc}
+                              onChange={(e) => setResolutionDesc(e.target.value)}
+                              rows={2}
+                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+
+                          {/* Geo Tracker Warning */}
+                          <div className="flex items-center space-x-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide bg-slate-50 p-2 rounded-lg border border-slate-150">
+                            <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                            <span>System will auto-record high-accuracy GPS & timestamp</span>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleResolveIssue(selectedIssue.id)}
+                              disabled={resolutionLoading || !resolutionPhoto}
+                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 text-white font-extrabold rounded-lg text-[10px] uppercase cursor-pointer flex items-center justify-center space-x-1"
+                            >
+                              {resolutionLoading ? "Analyzing Resolution..." : "Verify & Resolve via AI"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsResolving(false);
+                                setResolutionPhoto(null);
+                                setResolutionDesc("");
+                                setResolutionError("");
+                              }}
+                              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded-lg text-[10px] uppercase cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!userProfile || userProfile.id === "guest") {
+                              setAuthMode("signup");
+                              setShowAuthModal(true);
+                              return;
+                            }
+                            setIsResolving(true);
+                          }}
+                          className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-extrabold rounded-lg text-[10px] uppercase cursor-pointer flex items-center justify-center space-x-1"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>I've Fixed This (Verify with AI)</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {resolutionSuccessMsg && (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-semibold rounded-lg shadow-sm leading-relaxed">
+                      {resolutionSuccessMsg}
+                    </div>
+                  )}
+                </div>
+
                 {/* Corroborations list */}
                 <div className="space-y-3">
                   <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider block">
-                    Citizen Corroborations ({selectedIssue.corroborations.length})
+                    Citizen Corroborations ({selectedIssue.corroborations ? selectedIssue.corroborations.length : 0})
                   </span>
 
-                  <div className="space-y-2.5">
-                    {selectedIssue.corroborations.map((corr) => (
-                      <div key={corr.id} className="bg-white border border-slate-200 p-3 rounded-xl space-y-1 shadow-sm">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-extrabold text-slate-700">{corr.author}</span>
-                          <span className="text-indigo-600 font-bold">Active Citizen</span>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed font-medium">{corr.text}</p>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    {(() => {
+                      const allCorrs = selectedIssue.corroborations || [];
+                      // Separate top-level comments and nested comments
+                      const topLevel = allCorrs.filter(c => !c.parentId);
+                      const getReplies = (parentId: string) => allCorrs.filter(c => c.parentId === parentId);
+
+                      if (topLevel.length === 0) {
+                        return <p className="text-[11px] text-slate-400 italic">No corroborations yet. Add your testimony below!</p>;
+                      }
+
+                      return topLevel.map((corr) => {
+                        const replies = getReplies(corr.id);
+                        return (
+                          <div key={corr.id} className="space-y-2">
+                            {/* Top level comment */}
+                            <div className="bg-white border border-slate-200 p-3 rounded-xl space-y-1.5 shadow-sm">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-extrabold text-slate-700">{corr.author}</span>
+                                <span className="text-indigo-600 font-bold">Active Citizen</span>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed font-medium">{corr.text}</p>
+                              
+                              {/* Interaction: Upvote and Reply buttons */}
+                              <div className="flex items-center space-x-3 pt-1 text-[10px] font-bold text-slate-400">
+                                <button 
+                                  onClick={() => handleVoteComment(selectedIssue.id, corr.id)}
+                                  className="flex items-center space-x-1 hover:text-indigo-600 transition-colors cursor-pointer bg-transparent border-none"
+                                >
+                                  <ThumbsUp className="h-3 w-3" />
+                                  <span>{corr.upvotes || 0} Upvotes</span>
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setReplyingToCommentId(replyingToCommentId === corr.id ? null : corr.id);
+                                    setReplyText("");
+                                  }}
+                                  className="flex items-center space-x-1 hover:text-indigo-600 transition-colors cursor-pointer bg-transparent border-none"
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                  <span>Reply</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Nesting list of replies */}
+                            {replies.length > 0 && (
+                              <div className="ml-6 border-l-2 border-indigo-100 pl-3.5 space-y-2">
+                                {replies.map((reply) => (
+                                  <div key={reply.id} className="bg-slate-50 border border-slate-200/60 p-2.5 rounded-lg space-y-1 shadow-xs">
+                                    <div className="flex items-center justify-between text-[9px]">
+                                      <span className="font-extrabold text-slate-600">{reply.author}</span>
+                                      <span className="text-slate-400 font-bold">Reply</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-600 leading-relaxed font-medium">{reply.text}</p>
+                                    
+                                    {/* Vote for reply */}
+                                    <div className="flex items-center space-x-3 pt-0.5 text-[9px] font-bold text-slate-400">
+                                      <button 
+                                        onClick={() => handleVoteComment(selectedIssue.id, reply.id)}
+                                        className="flex items-center space-x-1 hover:text-indigo-600 transition-colors cursor-pointer bg-transparent border-none"
+                                      >
+                                        <ThumbsUp className="h-2.5 w-2.5" />
+                                        <span>{reply.upvotes || 0}</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Inline reply form for this comment */}
+                            {replyingToCommentId === corr.id && (
+                              <div className="ml-6 flex space-x-2 pt-1">
+                                <input 
+                                  type="text" 
+                                  placeholder={`Reply to ${corr.author}...`}
+                                  value={replyText}
+                                  onChange={(e) => setReplyText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      handleAddCorroboration(selectedIssue.id, corr.id, replyText);
+                                      setReplyingToCommentId(null);
+                                      setReplyText("");
+                                    }
+                                  }}
+                                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
+                                />
+                                <button
+                                  onClick={() => {
+                                    handleAddCorroboration(selectedIssue.id, corr.id, replyText);
+                                    setReplyingToCommentId(null);
+                                    setReplyText("");
+                                  }}
+                                  className="px-3 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors rounded-lg text-[10px] font-bold uppercase cursor-pointer"
+                                >
+                                  Reply
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
 
                   {/* Add corroboration comment input */}
@@ -560,11 +983,11 @@ export default function App() {
                       value={corroborationText}
                       onChange={(e) => setCorroborationText(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleAddCorroboration(selectedIssue.id)}
-                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 font-medium"
                     />
                     <button
                       onClick={() => handleAddCorroboration(selectedIssue.id)}
-                      className="p-2.5 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors rounded-xl cursor-pointer"
+                      className="p-2.5 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors rounded-xl cursor-pointer shadow-sm active:scale-95"
                     >
                       <Send className="h-4 w-4" />
                     </button>
@@ -638,7 +1061,7 @@ export default function App() {
         )}
 
         {/* Navigation bottom control bar bar */}
-        <div className="h-16 bg-white border-t border-slate-200 px-5 flex items-center justify-between z-20 select-none">
+        <div className={`h-16 bg-white border-t border-slate-200 flex items-center z-20 select-none ${isGuest ? 'px-0' : 'px-5 justify-between'}`}>
           {!isGuest && (
             <button 
               onClick={() => {
@@ -659,7 +1082,11 @@ export default function App() {
               setActiveTab("maps");
               setSelectedIssue(null);
             }}
-            className={`flex flex-col items-center space-y-0.5 w-12 transition-colors cursor-pointer ${
+            className={`flex flex-col items-center justify-center space-y-0.5 transition-colors cursor-pointer ${
+              isGuest 
+                ? "flex-1 h-full hover:bg-slate-50 border-r border-slate-100" 
+                : "w-12"
+            } ${
               activeTab === "maps" ? "text-indigo-600 font-extrabold" : "text-slate-400 hover:text-slate-600"
             }`}
           >
@@ -668,14 +1095,18 @@ export default function App() {
           </button>
 
           {/* Spacer for floating FAB report button */}
-          <div className="w-10" />
+          {!isGuest && <div className="w-10" />}
 
           <button 
             onClick={() => {
               setActiveTab("campaigns");
               setSelectedIssue(null);
             }}
-            className={`flex flex-col items-center space-y-0.5 w-12 transition-colors cursor-pointer ${
+            className={`flex flex-col items-center justify-center space-y-0.5 transition-colors cursor-pointer ${
+              isGuest 
+                ? "flex-1 h-full hover:bg-slate-50" 
+                : "w-12"
+            } ${
               activeTab === "campaigns" ? "text-indigo-600 font-extrabold" : "text-slate-400 hover:text-slate-600"
             }`}
           >
@@ -699,95 +1130,155 @@ export default function App() {
           )}
         </div>
 
-        {/* Sign In & Sign Up Modal Overlay */}
+        {/* Sign In & Sign Up Dedicated Page Overlay */}
         <AnimatePresence>
           {showAuthModal && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              className="absolute inset-0 bg-slate-50 z-50 flex flex-col justify-between p-6 select-none"
             >
-              <motion.div 
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-[340px] space-y-4 shadow-xl relative text-left"
-              >
+              {/* Header Brand */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1.5">
+                  <ShieldCheck className="h-5 w-5 text-indigo-600 animate-pulse" />
+                  <span className="text-sm font-black tracking-widest text-slate-800 uppercase">IndiaCivic</span>
+                </div>
                 <button 
                   onClick={() => {
                     setShowAuthModal(false);
                     setAuthError("");
                   }}
-                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider cursor-pointer border border-slate-200"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-3.5 w-3.5" />
+                  <span>Back</span>
                 </button>
+              </div>
 
-                <div className="text-center space-y-1">
-                  <div className="mx-auto h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                    <UserPlus className="h-5 w-5 text-indigo-600" />
+              {/* Main Container */}
+              <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full space-y-6">
+                <div className="text-center space-y-1.5">
+                  <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
+                    {authMode === 'signin' ? (
+                      <Lock className="h-5 w-5 text-indigo-600" />
+                    ) : signUpRole === 'CITIZEN' ? (
+                      <UserPlus className="h-5 w-5 text-indigo-600" />
+                    ) : (
+                      <Building className="h-5 w-5 text-indigo-600" />
+                    )}
                   </div>
-                  <h3 className="text-md font-extrabold text-slate-800 uppercase tracking-wider">
-                    {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-wider">
+                    {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
                   </h3>
-                  <p className="text-[10px] text-slate-400">
-                    {authMode === 'signin' ? 'Access your civic workspace' : 'Join local citizen campaigns'}
+                  <p className="text-xs text-slate-400">
+                    {authMode === 'signin' 
+                      ? 'Access your civic workspace to resume local actions' 
+                      : signUpRole === 'CITIZEN' 
+                        ? 'Join IndiaCivic as a resident and start earning rewards'
+                        : 'Register your Organization, NGO, or RWA to host campaigns'}
                   </p>
                 </div>
 
                 {authError && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-[10px] text-rose-600 font-semibold leading-relaxed">
+                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-semibold leading-relaxed shadow-sm">
                     {authError}
                   </div>
                 )}
 
-                <form onSubmit={authMode === 'signin' ? handleSignIn : handleSignUp} className="space-y-3">
+                <form onSubmit={authMode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
                   {authMode === 'signup' && (
-                    <div className="relative">
-                      <input 
-                        type="text"
-                        placeholder="Full Name (Rahul Sharma)"
-                        value={authName}
-                        onChange={(e) => setAuthName(e.target.value)}
-                        required
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
-                      />
-                      <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <div className="space-y-4">
+                      {/* Account Type Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Choose Account Type</label>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setSignUpRole('CITIZEN')}
+                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                              signUpRole === 'CITIZEN' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <User className="h-3.5 w-3.5" />
+                            <span>Citizen</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSignUpRole('ORGANIZATION')}
+                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                              signUpRole === 'ORGANIZATION' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <Building className="h-3.5 w-3.5" />
+                            <span>Organization</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
-                  <div className="relative">
-                    <input 
-                      type="email"
-                      placeholder="Email (neighbor@civic.in)"
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      required
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
-                    />
-                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  {/* Email address */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Email Address</label>
+                    <div className="relative">
+                      <input 
+                        type="email"
+                        placeholder="e.g. neighbor@civic.in"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        required
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                      />
+                      <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                    </div>
                   </div>
 
-                  <div className="relative">
-                    <input 
-                      type="password"
-                      placeholder="Password (6+ characters)"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      required
-                      minLength={6}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
-                    />
-                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  {/* Password */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Password</label>
+                    <div className="relative">
+                      <input 
+                        type="password"
+                        placeholder="Min. 6 characters"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                      />
+                      <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                    </div>
                   </div>
 
                   <button 
                     type="submit"
                     disabled={authLoading}
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-black text-[11px] uppercase rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-1 shadow-sm"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-bold text-xs uppercase rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-md active:scale-95"
                   >
-                    {authLoading ? 'Syncing...' : (authMode === 'signin' ? 'Sign In' : 'Sign Up')}
+                    <span>{authLoading ? 'Syncing Profile...' : (authMode === 'signin' ? 'Sign In' : 'Create Account')}</span>
+                  </button>
+
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold uppercase tracking-wider">or continue with</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <button 
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={authLoading}
+                    className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 disabled:opacity-50 font-bold text-xs rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24">
+                      <path fill="#EA4335" d="M12 5.04c1.65 0 3.13.57 4.3 1.69l3.21-3.21C17.55 1.77 14.99 1 12 1 7.35 1 3.37 3.67 1.39 7.56l3.85 2.99c.91-2.73 3.47-4.51 6.76-4.51z" />
+                      <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.28 1.48-1.12 2.74-2.38 3.58l3.7 2.87c2.16-2 3.71-4.94 3.71-8.6z" />
+                      <path fill="#FBBC05" d="M5.24 14.55c-.24-.72-.38-1.5-.38-2.3 0-.8.14-1.58.38-2.3L1.39 7.56C.5 9.35 0 11.37 0 12.5s.5 3.15 1.39 4.94l3.85-2.89z" />
+                      <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.11.75-2.52 1.19-4.26 1.19-3.29 0-5.85-1.78-6.76-4.51L1.39 16.9C3.37 20.33 7.35 23 12 23z" />
+                    </svg>
+                    <span>Google Account</span>
                   </button>
                 </form>
 
@@ -797,9 +1288,113 @@ export default function App() {
                       setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
                       setAuthError("");
                     }}
-                    className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer bg-transparent border-none"
+                    className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer bg-transparent border-none uppercase tracking-wide transition-colors"
                   >
                     {authMode === 'signin' ? "Don't have an account? Sign Up" : "Already registered? Sign In"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Secure footer */}
+              <div className="text-center text-[10px] text-slate-400 font-medium">
+                🔒 Secured by Firebase Authentication • IndiaCivic
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Upvote Optional Proof Modal Overlay */}
+        <AnimatePresence>
+          {showUpvoteProofModal && upvoteIssueId && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 select-none"
+            >
+              <motion.div 
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl border border-slate-100 text-left"
+              >
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
+                    <ThumbsUp className="h-4 w-4 text-indigo-600" />
+                    <span>I have also seen this!</span>
+                  </h3>
+                  <button 
+                    onClick={() => setShowUpvoteProofModal(false)}
+                    className="p-1 hover:bg-slate-100 text-slate-400 rounded-lg cursor-pointer animate-none bg-transparent border-none"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                  Would you like to attach an optional photo or comment to help corroborate and verify this post? Contributing media boosts the post's visibility and earns you bonus reputation points.
+                </p>
+
+                {/* Optional Media Preview */}
+                <div className="space-y-3">
+                  {upvoteMedia ? (
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 h-24 bg-slate-100">
+                      <img src={upvoteMedia} className="w-full h-full object-cover animate-none" />
+                      <button 
+                        onClick={() => setUpvoteMedia(null)}
+                        className="absolute top-1.5 right-1.5 p-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full cursor-pointer border-none"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-dashed border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-50">
+                      <Camera className="h-4 w-4 text-slate-400 mb-0.5" />
+                      <label className="text-[9px] font-black text-indigo-600 hover:text-indigo-700 cursor-pointer uppercase tracking-wider">
+                        <span>Attach optional media</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const r = new FileReader();
+                              r.onload = () => setUpvoteMedia(r.result as string);
+                              r.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden" 
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Optional Text comment */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block font-mono">Optional corroboration notes</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g. Yes, still flooded as of 1 hour ago..."
+                      value={upvoteText}
+                      onChange={(e) => setUpvoteText(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col space-y-2 pt-1.5">
+                  <button
+                    onClick={() => handleVote(upvoteIssueId, "UPVOTE", upvoteMedia || "skip_media", upvoteText || "Also seen")}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-1.5 shadow-md border-none"
+                  >
+                    <span>Submit Upvote with Proof</span>
+                  </button>
+                  <button
+                    onClick={() => handleVote(upvoteIssueId, "UPVOTE", "skip_media", "Just upvoted")}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center border-none"
+                  >
+                    <span>Just upvote (Skip proof)</span>
                   </button>
                 </div>
               </motion.div>

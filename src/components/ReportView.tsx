@@ -48,7 +48,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
   const [successMsg, setSuccessMsg] = useState("");
 
   // Camera & File Upload states
-  const [activeSourceTab, setActiveSourceTab] = useState<"preset" | "device">("preset");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [capturedVideo, setCapturedVideo] = useState<string | null>(null);
@@ -73,30 +72,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
     "Theft & Safety Incidents",
     "Threats & Anti-social Threats"
   ];
-
-  // Quick select pre-filled descriptions and mock images for testing
-  const mockScenarios = [
-    {
-      title: "Garbage Pile on Sidewalk",
-      category: "Waste Management",
-      desc: "There is a massive pile of uncollected plastic waste and food scraps rotting on the corner sidewalk. It is attracting stray animals.",
-      img: "https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      title: "Stagnant Water / Dengue Risk",
-      category: "Mosquito Infestation & Waterlogging",
-      desc: "Stagnant water has pooled in front of our school gate due to blocked drains. Mosquitoes are breeding extensively here, raising malaria risk.",
-      img: "https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      title: "Unsafe Dark Street Stretch",
-      category: "Night Lighting & Women's Safety",
-      desc: "Streetlight is broken on this back-alley stretch behind the metro station. It is pitch dark at night and unsafe for women walking home.",
-      img: "https://images.unsplash.com/photo-1509024644558-2f56ce76c490?auto=format&fit=crop&w=600&q=80"
-    }
-  ];
-
-  const [selectedScenarioImg, setSelectedScenarioImg] = useState(mockScenarios[0].img);
 
   useEffect(() => {
     // Simulate slight fluctuations in GPS coordinate accuracy
@@ -138,13 +113,13 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
   };
 
   useEffect(() => {
-    if (activeSourceTab === "device" && !capturedPhoto && !capturedVideo) {
+    if (!capturedPhoto && !capturedVideo) {
       startCamera();
     } else {
       stopCamera();
     }
     return () => stopCamera();
-  }, [activeSourceTab, capturedPhoto, capturedVideo, videoElementRef]);
+  }, [capturedPhoto, capturedVideo, videoElementRef]);
 
   const capturePhoto = () => {
     if (!videoElementRef) return;
@@ -156,7 +131,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
       ctx.drawImage(videoElementRef, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg");
       setCapturedPhoto(dataUrl);
-      setSelectedScenarioImg(dataUrl);
       stopCamera();
     }
   };
@@ -185,7 +159,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
       const blob = new Blob(chunks, { type: "video/webm" });
       const videoUrl = URL.createObjectURL(blob);
       setCapturedVideo(videoUrl);
-      setSelectedScenarioImg("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=600&q=80"); // fallback preview
     };
 
     recorder.start();
@@ -210,12 +183,10 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
       const result = fileReader.result as string;
       if (file.type.startsWith("image/")) {
         setCapturedPhoto(result);
-        setSelectedScenarioImg(result);
         setCapturedVideo(null);
       } else if (file.type.startsWith("video/")) {
         setCapturedVideo(result);
         setCapturedPhoto(null);
-        setSelectedScenarioImg("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=600&q=80");
       }
     };
     fileReader.readAsDataURL(file);
@@ -224,7 +195,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
   const clearCapturedMedia = () => {
     setCapturedPhoto(null);
     setCapturedVideo(null);
-    setSelectedScenarioImg(mockScenarios[0].img);
   };
 
   const handleAIScan = async () => {
@@ -243,7 +213,7 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           description,
-          imageBase64: selectedScenarioImg // Passing prefilled mockup image as parameter
+          imageBase64: capturedPhoto || undefined
         })
       });
 
@@ -273,7 +243,7 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
       locationName: "Indiranagar, Bengaluru",
       latitude: coords.lat,
       longitude: coords.lng,
-      imageUrl: selectedScenarioImg,
+      imageUrl: capturedPhoto || undefined,
       videoUrl: capturedVideo || undefined,
       isAnonymous: !earnPointsMode,
       evidenceLinks: evidenceLink ? [evidenceLink] : [],
@@ -295,7 +265,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
         setScanResult(null);
         setCapturedPhoto(null);
         setCapturedVideo(null);
-        setSelectedScenarioImg(mockScenarios[0].img);
         // Call callback to notify parent so it updates in real-time
         if (onAddIssue) {
           onAddIssue(data.issue);
@@ -368,232 +337,145 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
         <p className="text-xs text-slate-400 font-semibold uppercase mt-0.5">Mobile-first reporting terminal</p>
       </div>
 
-      {/* Report Source Tab Selector */}
-      <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveSourceTab("preset");
-            clearCapturedMedia();
-          }}
-          className={`flex-1 py-2 text-xs font-bold uppercase rounded-lg transition-all cursor-pointer ${
-            activeSourceTab === "preset"
-              ? "bg-white text-indigo-700 shadow-sm"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          📍 Simulated Cases
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveSourceTab("device");
-            clearCapturedMedia();
-          }}
-          className={`flex-1 py-2 text-xs font-bold uppercase rounded-lg transition-all cursor-pointer ${
-            activeSourceTab === "device"
-              ? "bg-white text-indigo-700 shadow-sm"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          📷 Live Device Camera / Upload
-        </button>
-      </div>
-
       {/* Camera viewfinder section */}
       <div className="relative h-[240px] rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 shadow-md flex flex-col justify-center items-center">
-        {activeSourceTab === "preset" ? (
-          <>
-            {/* Dynamic camera image mock */}
-            <img 
-              src={selectedScenarioImg} 
-              alt="Viewfinder preview"
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover opacity-90 absolute inset-0"
-            />
-
-            {/* Viewfinder overlays */}
-            <div className="absolute inset-0 border-[16px] border-slate-200/40 pointer-events-none" />
-            <div className="absolute top-4 left-4 flex items-center space-x-1 bg-white px-2 py-1 rounded text-[9px] font-mono border border-slate-200 text-slate-700 shadow-sm z-10">
-              <MapPin className="h-3 w-3 text-indigo-600" />
-              <span>{coords.lat}° N, {coords.lng}° E</span>
-            </div>
-
-            <div className="absolute top-4 right-4 flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded text-[10px] font-bold text-emerald-700 shadow-sm z-10">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>GPS LOCK 100%</span>
-            </div>
-
-            {/* Crosshair target */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <ScanLine className="h-10 w-10 text-indigo-500/40 animate-pulse" />
-            </div>
-
-            {/* Floating scenario switch buttons for fast testing */}
-            <div className="absolute bottom-4 inset-x-4 flex justify-between bg-slate-50/95 backdrop-blur-sm p-2 rounded-xl border border-slate-200 shadow-sm z-10">
-              <span className="text-[10px] text-slate-500 font-bold uppercase self-center ml-1">Scenarios:</span>
-              <div className="flex space-x-1.5">
-                {mockScenarios.map((scen, idx) => (
-                  <button
-                    type="button"
-                    key={idx}
-                    onClick={() => {
-                      setSelectedScenarioImg(scen.img);
-                      setDescription(scen.desc);
-                      setSelectedCategory(scen.category);
-                      setScanResult(null);
-                    }}
-                    className={`px-2 py-1 text-[9px] font-extrabold rounded-lg uppercase border transition-all cursor-pointer ${
-                      selectedScenarioImg === scen.img 
-                        ? "bg-indigo-600 border-indigo-500 text-white shadow-sm" 
-                        : "bg-white border-slate-200 text-slate-600"
-                    }`}
-                  >
-                    {scen.category.split(" ")[0]}
-                  </button>
-                ))}
+        <div className="w-full h-full relative flex flex-col justify-center items-center">
+          {capturedPhoto ? (
+            <div className="w-full h-full relative">
+              <img 
+                src={capturedPhoto} 
+                alt="Captured review" 
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-4 right-4 z-20">
+                <button
+                  type="button"
+                  onClick={clearCapturedMedia}
+                  className="flex items-center space-x-1 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-md cursor-pointer uppercase transition-all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Clear</span>
+                </button>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="w-full h-full relative flex flex-col justify-center items-center">
-            {capturedPhoto ? (
-              <div className="w-full h-full relative">
-                <img 
-                  src={capturedPhoto} 
-                  alt="Captured review" 
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute bottom-4 right-4 z-20">
-                  <button
-                    type="button"
-                    onClick={clearCapturedMedia}
-                    className="flex items-center space-x-1 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-md cursor-pointer uppercase transition-all"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Clear</span>
-                  </button>
-                </div>
+          ) : capturedVideo ? (
+            <div className="w-full h-full relative">
+              <video 
+                src={capturedVideo} 
+                controls 
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-4 right-4 z-20">
+                <button
+                  type="button"
+                  onClick={clearCapturedMedia}
+                  className="flex items-center space-x-1 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-md cursor-pointer uppercase transition-all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Clear</span>
+                </button>
               </div>
-            ) : capturedVideo ? (
-              <div className="w-full h-full relative">
-                <video 
-                  src={capturedVideo} 
-                  controls 
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute bottom-4 right-4 z-20">
-                  <button
-                    type="button"
-                    onClick={clearCapturedMedia}
-                    className="flex items-center space-x-1 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-md cursor-pointer uppercase transition-all"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Clear</span>
-                  </button>
-                </div>
+            </div>
+          ) : cameraStream ? (
+            <div className="w-full h-full relative flex flex-col justify-end">
+              <video
+                ref={(el) => {
+                  setVideoElementRef(el);
+                  if (el && cameraStream && el.srcObject !== cameraStream) {
+                    el.srcObject = cameraStream;
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover absolute inset-0"
+              />
+              
+              {/* HUD Overlay */}
+              <div className="absolute top-4 left-4 flex items-center space-x-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[9px] font-mono text-white shadow-sm z-10 border border-white/10">
+                <MapPin className="h-3 w-3 text-red-500" />
+                <span>{coords.lat}° N, {coords.lng}° E</span>
               </div>
-            ) : cameraStream ? (
-              <div className="w-full h-full relative flex flex-col justify-end">
-                <video
-                  ref={(el) => {
-                    setVideoElementRef(el);
-                    if (el && cameraStream && el.srcObject !== cameraStream) {
-                      el.srcObject = cameraStream;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover absolute inset-0"
-                />
-                
-                {/* HUD Overlay */}
-                <div className="absolute top-4 left-4 flex items-center space-x-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[9px] font-mono text-white shadow-sm z-10 border border-white/10">
-                  <MapPin className="h-3 w-3 text-red-500" />
-                  <span>{coords.lat}° N, {coords.lng}° E</span>
+
+              {isRecording && (
+                <div className="absolute top-4 right-4 flex items-center space-x-1.5 bg-rose-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shadow-sm z-10 animate-pulse">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                  <span>RECORDING</span>
                 </div>
+              )}
 
-                {isRecording && (
-                  <div className="absolute top-4 right-4 flex items-center space-x-1.5 bg-rose-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shadow-sm z-10 animate-pulse">
-                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                    <span>RECORDING</span>
-                  </div>
-                )}
+              {/* Camera Buttons HUD */}
+              <div className="absolute bottom-4 inset-x-4 flex justify-center items-center space-x-4 bg-black/65 backdrop-blur-sm p-3 rounded-2xl border border-white/10 z-10 shadow-lg">
+                {/* Capture Photo Button */}
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  disabled={isRecording}
+                  className="flex-1 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-900 py-2.5 px-3 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all active:scale-95 shadow-md"
+                >
+                  <Camera className="h-4 w-4 text-slate-800" />
+                  <span>Take Photo</span>
+                </button>
 
-                {/* Camera Buttons HUD */}
-                <div className="absolute bottom-4 inset-x-4 flex justify-center items-center space-x-4 bg-black/65 backdrop-blur-sm p-3 rounded-2xl border border-white/10 z-10 shadow-lg">
-                  {/* Capture Photo Button */}
-                  <button
-                    type="button"
-                    onClick={capturePhoto}
-                    disabled={isRecording}
-                    className="flex-1 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-900 py-2.5 px-3 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all active:scale-95 shadow-md"
-                  >
-                    <Camera className="h-4 w-4 text-slate-800" />
-                    <span>Take Photo</span>
-                  </button>
-
-                  {/* Record Video Button */}
-                  <button
-                    type="button"
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all active:scale-95 shadow-md text-white ${
-                      isRecording 
-                        ? "bg-rose-600 hover:bg-rose-700 animate-pulse" 
-                        : "bg-slate-800 hover:bg-slate-700 border border-slate-600"
-                    }`}
-                  >
-                    {isRecording ? (
-                      <>
-                        <Square className="h-4 w-4 fill-white" />
-                        <span>Stop</span>
-                      </>
-                    ) : (
-                      <>
-                        <Video className="h-4 w-4" />
-                        <span>Record Video</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                {/* Record Video Button */}
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all active:scale-95 shadow-md text-white ${
+                    isRecording 
+                      ? "bg-rose-600 hover:bg-rose-700 animate-pulse" 
+                      : "bg-slate-800 hover:bg-slate-700 border border-slate-600"
+                  }`}
+                >
+                  {isRecording ? (
+                    <>
+                      <Square className="h-4 w-4 fill-white" />
+                      <span>Stop</span>
+                    </>
+                  ) : (
+                    <>
+                      <Video className="h-4 w-4" />
+                      <span>Record Video</span>
+                    </>
+                  )}
+                </button>
               </div>
-            ) : (
-              <div className="p-6 text-center flex flex-col items-center justify-center space-y-4">
-                <div className="p-3 bg-slate-800 border border-slate-700 rounded-full text-indigo-400">
-                  <Camera className="h-8 w-8" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-white text-xs font-bold uppercase tracking-wide">Device Camera is Ready</p>
-                  <p className="text-slate-400 text-[10px]">Grant permissions or upload a media file directly below</p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    className="flex items-center justify-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span>Start Live Feed</span>
-                  </button>
-
-                  <label className="flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold py-2 px-4 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider">
-                    <UploadCloud className="h-3.5 w-3.5" />
-                    <span>Capture / Upload File</span>
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      capture="environment"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+            </div>
+          ) : (
+            <div className="p-6 text-center flex flex-col items-center justify-center space-y-4">
+              <div className="p-3 bg-slate-800 border border-slate-700 rounded-full text-indigo-400">
+                <Camera className="h-8 w-8" />
               </div>
-            )}
-          </div>
-        )}
+              <div className="space-y-1">
+                <p className="text-white text-xs font-bold uppercase tracking-wide">Device Camera is Ready</p>
+                <p className="text-slate-400 text-[10px]">Grant permissions or upload a media file directly below</p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="flex items-center justify-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Start Live Feed</span>
+                </button>
+
+                <label className="flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold py-2 px-4 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider">
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  <span>Capture / Upload File</span>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    capture="environment"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Main submission form */}

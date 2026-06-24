@@ -65,28 +65,6 @@ export default function ProfileView({ user, citizen, org, onToggleRole }: Profil
 
   return (
     <div className="space-y-6 pb-24 text-left">
-      {/* Header Account Toggle */}
-      <div className="flex items-center justify-between p-1 bg-slate-100 border border-slate-200 rounded-xl">
-        <button
-          onClick={() => onToggleRole("CITIZEN")}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-            user.role === "CITIZEN" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          <User className="h-4 w-4" />
-          <span>Citizen Profile</span>
-        </button>
-        <button
-          onClick={() => onToggleRole("ORGANIZATION")}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-            user.role === "ORGANIZATION" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          <Building className="h-4 w-4" />
-          <span>Organization</span>
-        </button>
-      </div>
-
       {user.role === "CITIZEN" ? (
         // CITIZEN DASHBOARD LAYOUT
         <div className="space-y-6">

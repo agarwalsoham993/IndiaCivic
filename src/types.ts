@@ -9,6 +9,9 @@ export interface Comment {
   timestamp: string;
   text: string;
   avatar?: string;
+  parentId?: string;
+  upvotes?: number;
+  upvotedUserIds?: string[];
 }
 
 export interface Issue {
@@ -44,6 +47,12 @@ export interface Issue {
     description?: string;
     votedReleaseAgree: number;
     votedReleaseDisagree: number;
+    photo?: string;
+    latitude?: number;
+    longitude?: number;
+    timestamp?: string;
+    aiConfidence?: string;
+    aiAnalysisLog?: string;
   };
 }
 
