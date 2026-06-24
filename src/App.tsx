@@ -29,7 +29,9 @@ import {
   Building,
   CheckCircle2,
   Camera,
-  Check
+  Check,
+  Award,
+  LogOut
 } from "lucide-react";
 
 import { Issue, Campaign, UserProfile, Comment, Donation } from "./types";
@@ -49,6 +51,55 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from "firebase/auth";
+
+const SidebarItem = ({ 
+  icon: Icon, 
+  label, 
+  active, 
+  onClick 
+}: { 
+  icon: any; 
+  label: string; 
+  active: boolean; 
+  onClick: () => void; 
+}) => {
+  return (
+    <div className="w-full px-1">
+      <button
+        onClick={onClick}
+        className="group relative w-full flex flex-col items-center justify-center py-1 cursor-pointer border-none bg-transparent"
+      >
+        {/* Tooltip on hover */}
+        <div className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900 text-white text-[10px] font-black tracking-wider uppercase rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-150 transform translate-x-2 group-hover:translate-x-0 whitespace-nowrap pointer-events-none z-50">
+          {label}
+        </div>
+
+        {/* First Image UI Style: Rounded square container */}
+        <div className={`w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] rounded-2xl flex flex-col items-center justify-center transition-all ${
+          active 
+            ? "bg-[#cbe2d3] shadow-inner text-[#1e4620]" 
+            : "hover:bg-white/40 text-[#2d5a27]/70 hover:text-[#1e4620]"
+        }`}>
+          {/* Icon Badge container (as in the first image) */}
+          <div className={`p-1.5 rounded-xl flex items-center justify-center transition-all ${
+            active 
+              ? "bg-white text-[#1e4620] shadow-sm" 
+              : "bg-transparent text-[#2d5a27]"
+          }`}>
+            <Icon className="h-5 w-5" />
+          </div>
+
+          {/* Small label below icon */}
+          <span className={`text-[9px] font-extrabold mt-1 sm:mt-1.5 uppercase tracking-wider text-center px-1 truncate w-full ${
+            active ? "text-[#1e4620]" : "text-[#2d5a27]/80"
+          }`}>
+            {label}
+          </span>
+        </div>
+      </button>
+    </div>
+  );
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("maps");
@@ -92,24 +143,7 @@ export default function App() {
   const [signUpRole, setSignUpRole] = useState<'CITIZEN' | 'ORGANIZATION'>('CITIZEN');
 
   const isGuest = !userProfile || userProfile.id === "guest";
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const isTouchOrMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    );
-    return window.innerWidth < 768 || isTouchOrMobileUA;
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      const isTouchOrMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent
-      );
-      setIsMobile(window.innerWidth < 768 || isTouchOrMobileUA);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  const isMobile = false;
 
   useEffect(() => {
     if (isGuest && (activeTab === "home" || activeTab === "profile")) {
@@ -513,18 +547,608 @@ export default function App() {
     return "text-indigo-700 bg-indigo-50 border-indigo-200";
   };
 
+  if (!isMobile) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased flex relative">
+        {/* Left Desktop Sidebar - Collapsed & Pastel Green */}
+        <div className="w-16 sm:w-20 bg-[#e6f4ea] text-emerald-950 flex flex-col border-r border-[#cbe2d3] fixed h-full top-0 left-0 z-30 select-none">
+          {/* Brand Header */}
+          <div className="h-16 flex items-center justify-center border-b border-[#cbe2d3] bg-[#d5ecd9]/80">
+            <div className="group relative flex items-center justify-center">
+              <ShieldCheck className="h-6 w-6 text-emerald-700 animate-pulse cursor-pointer" />
+              {/* Tooltip */}
+              <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[10px] font-black tracking-wider uppercase rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                IndiaCivic
+              </div>
+            </div>
+          </div>
+
+          {/* Collapsed Sidebar Navigation links */}
+          <nav className="flex-1 py-6 flex flex-col items-center space-y-4">
+            {!isGuest && (
+              <SidebarItem 
+                icon={Home}
+                label="Home"
+                active={activeTab === "home" && !selectedIssue}
+                onClick={() => {
+                  setActiveTab("home");
+                  setSelectedIssue(null);
+                }}
+              />
+            )}
+
+            <SidebarItem 
+              icon={Map}
+              label="Map"
+              active={activeTab === "maps" && !selectedIssue}
+              onClick={() => {
+                setActiveTab("maps");
+                setSelectedIssue(null);
+              }}
+            />
+
+            <SidebarItem 
+              icon={Megaphone}
+              label="Campaigns"
+              active={activeTab === "campaigns" && !selectedIssue}
+              onClick={() => {
+                setActiveTab("campaigns");
+                setSelectedIssue(null);
+              }}
+            />
+
+            {!isGuest && (
+              <SidebarItem 
+                icon={User}
+                label="Profile"
+                active={activeTab === "profile" && !selectedIssue}
+                onClick={() => {
+                  setActiveTab("profile");
+                  setSelectedIssue(null);
+                }}
+              />
+            )}
+
+            {!isGuest && (
+              <SidebarItem 
+                icon={PlusCircle}
+                label="Report"
+                active={activeTab === "report" && !selectedIssue}
+                onClick={() => {
+                  setActiveTab("report");
+                  setSelectedIssue(null);
+                }}
+              />
+            )}
+          </nav>
+
+          {/* Sidebar Footer */}
+          <div className="p-3 border-t border-[#cbe2d3] bg-[#d5ecd9]/40 flex flex-col items-center space-y-4">
+            {isGuest ? (
+              <button 
+                onClick={() => {
+                  setAuthMode('signup');
+                  setShowAuthModal(true);
+                }}
+                className="group relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md transition-all cursor-pointer border-none"
+              >
+                <UserPlus className="h-5 w-5" />
+                <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap pointer-events-none z-50">
+                  Join / Sign In
+                </div>
+              </button>
+            ) : (
+              <div className="flex flex-col items-center space-y-4 w-full">
+                {/* User Avatar Badge with Hover Stats Card */}
+                <div className="group relative w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white border border-[#b2dbbf] text-emerald-950 flex items-center justify-center font-black text-sm uppercase shadow-xs">
+                  {(userProfile?.username || "C").charAt(0)}
+                  {/* Tooltip showing full stats */}
+                  <div className="absolute left-full ml-4 p-3 bg-slate-900 text-white text-[10px] font-bold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-150 transform translate-x-2 group-hover:translate-x-0 whitespace-nowrap pointer-events-none z-50 flex flex-col space-y-1">
+                    <span className="font-extrabold text-white text-xs">{userProfile?.username}</span>
+                    <span className="text-slate-400 text-[9px] uppercase tracking-wider">{userProfile?.role}</span>
+                    <span className="text-emerald-400 text-[9px] font-mono">{userProfile?.totalPoints || 0} XP Points</span>
+                  </div>
+                </div>
+                
+                {/* Logout Button */}
+                <button 
+                  onClick={handleLogout}
+                  className="group relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#fde8e8] hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <LogOut className="h-4.5 w-4.5" />
+                  <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap pointer-events-none z-50">
+                    Logout Account
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Content Frame */}
+        <div className="flex-1 flex flex-col min-h-screen pl-16 sm:pl-20 w-full bg-slate-50">
+          {/* Desktop Header - Hidden for MapsView to allow 100% full screen expansion */}
+          {activeTab !== "maps" && (
+            <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs">
+            <div className="flex items-center space-x-2">
+              {selectedIssue ? (
+                <button 
+                  onClick={() => setSelectedIssue(null)}
+                  className="text-xs font-bold text-slate-500 hover:text-indigo-600 flex items-center space-x-1 uppercase cursor-pointer bg-transparent border-none"
+                >
+                  <span>← Back to Community Feed</span>
+                </button>
+              ) : (
+                <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest font-sans">
+                  {activeTab === "home" && "Citizen Action Feed"}
+                  {activeTab === "maps" && "Live Interactive Civic Map"}
+                  {activeTab === "report" && "File a Verified Civic Ticket"}
+                  {activeTab === "campaigns" && "Neighborhood Crowdfunding Escrows"}
+                  {activeTab === "profile" && "Citizen Passport Dashboard"}
+                </h2>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-500 bg-slate-100/80 px-3 py-1.5 rounded-lg border border-slate-200">
+                <MapPin className="h-3.5 w-3.5 text-indigo-500 animate-pulse" />
+                <span>Indiranagar, Bengaluru (Ward 88)</span>
+              </div>
+              
+              {!isGuest && (
+                <div className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-100 text-xs font-bold">
+                  <Award className="h-4 w-4 text-indigo-600" />
+                  <span>{userProfile?.totalPoints} XP</span>
+                </div>
+              )}
+            </div>
+          </header>
+          )}
+
+          {/* Main Desktop Scrollable Area */}
+          <main className={`flex-1 ${activeTab === "maps" ? "h-screen w-full overflow-hidden p-0" : "overflow-y-auto p-8"}`}>
+            <div className={activeTab === "maps" ? "w-full h-full" : "max-w-7xl mx-auto w-full"}>
+              <AnimatePresence mode="wait">
+                {selectedIssue ? (
+                  // Desktop Issue Detail View - Styled with Responsive grid layout
+                  <motion.div
+                    key="issue-details-desktop"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="space-y-5 pb-16 text-left animate-none"
+                  >
+                    {/* Back button */}
+                    <button 
+                      onClick={() => setSelectedIssue(null)}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center space-x-1 uppercase cursor-pointer bg-transparent border-none"
+                    >
+                      <span>← Back to Feed</span>
+                    </button>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                      {/* Left Side: General Issue info */}
+                      <div className="lg:col-span-7 space-y-5">
+                        {/* Cover visual header */}
+                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 h-64 shadow-sm bg-slate-100">
+                          <img 
+                            src={selectedIssue.imageUrl || "https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=600&q=80"}
+                            alt={selectedIssue.title}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-transparent to-transparent" />
+                          
+                          <div className="absolute bottom-4 left-4 space-y-1">
+                            <span className="px-2 py-0.5 text-[8px] font-bold bg-white/90 border border-slate-200 text-slate-800 rounded font-mono uppercase">
+                              VIRTUAL ASSET: {selectedIssue.virtualAssetId}
+                            </span>
+                            <h3 className="text-lg font-extrabold text-white">{selectedIssue.title}</h3>
+                          </div>
+                        </div>
+
+                        {/* Subheader info stats */}
+                        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-sm">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">TRACKING TICKET</span>
+                            <span className="font-mono text-indigo-600 font-bold">{selectedIssue.trackingId}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">REPORTER ROLE</span>
+                            <span className="font-semibold text-slate-700">{selectedIssue.reporterName}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">ROUTED PUBLIC DIVISION</span>
+                            <span className="font-semibold text-slate-700 truncate max-w-[200px]">{selectedIssue.department}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">WARD ASSIGNED</span>
+                            <span className="font-semibold text-slate-700">{selectedIssue.ward}</span>
+                          </div>
+                        </div>
+
+                        {/* Description paragraph */}
+                        <p className="text-xs text-slate-600 leading-relaxed bg-white p-4 rounded-xl border border-slate-200 shadow-sm font-medium">
+                          {selectedIssue.description}
+                        </p>
+
+                        {/* Community consensus verification action panel */}
+                        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3 shadow-sm">
+                          <div className="flex items-center space-x-2">
+                            <ShieldCheck className="h-4.5 w-4.5 text-indigo-600" />
+                            <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide font-sans">Community Verification</h4>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                            Is this problem real and described accurately? Your verification consensus triggers auto-escalation to the Ward {selectedIssue.representative}.
+                          </p>
+
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleVote(selectedIssue.id, "AGREE")}
+                              className="flex-1 py-2 bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold rounded-lg text-[10px] uppercase cursor-pointer flex items-center justify-center space-x-1 border-none"
+                            >
+                              <ThumbsUp className="h-3 w-3" />
+                              <span>Yes, Verified</span>
+                            </button>
+                            <button
+                              onClick={() => handleVote(selectedIssue.id, "DISAGREE")}
+                              className="flex-1 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-extrabold rounded-lg text-[10px] uppercase cursor-pointer flex items-center justify-center space-x-1"
+                            >
+                              <ThumbsDown className="h-3 w-3" />
+                              <span>Inaccurate</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* RESOLUTION STATUS MODULE */}
+                        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
+                              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide font-sans">Issue Resolution Status</h4>
+                            </div>
+                            <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getSeverityBadgeColor(selectedIssue.severity)}`}>
+                              {selectedIssue.status}
+                            </span>
+                          </div>
+
+                          {selectedIssue.status === "RESOLVED" ? (
+                            <div className="space-y-3 bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-100">
+                              <div className="flex items-center space-x-2 text-emerald-800 text-xs font-bold">
+                                <Check className="h-4 w-4 bg-emerald-100 rounded-full p-0.5" />
+                                <span>Verified Resolved via Proof</span>
+                              </div>
+                              {selectedIssue.resolutionProof?.photo && (
+                                <div className="h-40 rounded-lg overflow-hidden border border-emerald-200 shadow-xs">
+                                  <img 
+                                    src={selectedIssue.resolutionProof.photo} 
+                                    alt="Resolution Proof" 
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
+                              <div className="text-[10px] text-emerald-700 font-medium space-y-0.5 font-mono">
+                                <div>Timestamp: {selectedIssue.resolutionProof?.timestamp ? new Date(selectedIssue.resolutionProof.timestamp).toLocaleString() : "N/A"}</div>
+                                <div>Coordinates: {selectedIssue.resolutionProof?.latitude?.toFixed(6)}, {selectedIssue.resolutionProof?.longitude?.toFixed(6)}</div>
+                                <div>AI Match Confidence: {selectedIssue.resolutionProof?.aiConfidence ? `${selectedIssue.resolutionProof.aiConfidence}%` : "Pending Match"}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {isResolving ? (
+                                <div className="space-y-3 pt-1 border-t border-slate-100">
+                                  {resolutionError && (
+                                    <div className="p-2 bg-rose-50 border border-rose-150 text-rose-600 text-[10px] font-semibold rounded">
+                                      {resolutionError}
+                                    </div>
+                                  )}
+                                  
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase block">1. Attach Proof Image</label>
+                                    {resolutionPhoto ? (
+                                      <div className="relative rounded-lg overflow-hidden h-28 border border-slate-200">
+                                        <img src={resolutionPhoto} className="w-full h-full object-cover" />
+                                        <button 
+                                          onClick={() => setResolutionPhoto(null)}
+                                          className="absolute top-2 right-2 p-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full cursor-pointer"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 flex flex-col items-center justify-center bg-slate-50">
+                                        <Camera className="h-5 w-5 text-slate-400 mb-1" />
+                                        <label className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-700 cursor-pointer uppercase tracking-wider">
+                                          <span>Capture / Upload Proof</span>
+                                          <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                const r = new FileReader();
+                                                r.onload = () => setResolutionPhoto(r.result as string);
+                                                r.readAsDataURL(file);
+                                              }
+                                            }}
+                                            className="hidden" 
+                                          />
+                                        </label>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase block">2. Describe Action Taken</label>
+                                    <textarea
+                                      placeholder="Describe what was done to fix it..."
+                                      value={resolutionDesc}
+                                      onChange={(e) => setResolutionDesc(e.target.value)}
+                                      rows={2}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center space-x-1 text-[9px] text-slate-400 font-mono">
+                                    <MapPin className="h-3 w-3 text-indigo-500" />
+                                    <span>Auto-records GPS & timestamp</span>
+                                  </div>
+
+                                  <div className="flex space-x-1.5 pt-1">
+                                    <button
+                                      onClick={() => handleResolveIssue(selectedIssue.id)}
+                                      disabled={resolutionLoading || !resolutionPhoto}
+                                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 text-white font-extrabold rounded text-[10px] uppercase cursor-pointer border-none"
+                                    >
+                                      {resolutionLoading ? "Analyzing..." : "Verify & Resolve"}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setIsResolving(false);
+                                        setResolutionPhoto(null);
+                                        setResolutionDesc("");
+                                        setResolutionError("");
+                                      }}
+                                      className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded text-[10px] uppercase cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (!userProfile || userProfile.id === "guest") {
+                                      setAuthMode("signup");
+                                      setShowAuthModal(true);
+                                      return;
+                                    }
+                                    setIsResolving(true);
+                                  }}
+                                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] uppercase rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-2 border-none shadow-md"
+                                >
+                                  <Camera className="h-4 w-4" />
+                                  <span>Resolve Issue with Verified Proof</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right Side: Comments / Activity Discussion Feed */}
+                      <div className="lg:col-span-5 flex flex-col space-y-5 h-full">
+                        {/* DISCUSSION FORUM (COMMENTS MODULE) */}
+                        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-4 shadow-sm text-left animate-none flex-1 flex flex-col">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide font-sans">Citizen Discussion Panel</h4>
+                            <span className="font-mono text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded">
+                              {selectedIssue.corroborations ? selectedIssue.corroborations.length : 0} Comments
+                            </span>
+                          </div>
+
+                          {/* Comment Input */}
+                          <div className="space-y-2">
+                            <div className="flex space-x-2">
+                              <input 
+                                type="text"
+                                placeholder="Add to the public record anonymously..."
+                                value={corroborationText}
+                                onChange={(e) => setCorroborationText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleAddCorroboration(selectedIssue.id);
+                                }}
+                                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20 font-medium"
+                              />
+                              <button
+                                onClick={() => handleAddCorroboration(selectedIssue.id)}
+                                className="px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] uppercase rounded-xl transition-all cursor-pointer border-none shadow-sm"
+                              >
+                                Comment
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Comments List */}
+                          <div className="space-y-3 flex-1 overflow-y-auto pr-1 min-h-[300px]">
+                            {(() => {
+                              const allCorrs = selectedIssue.corroborations || [];
+                              const topLevel = allCorrs.filter(c => !c.parentId);
+                              const getReplies = (parentId: string) => allCorrs.filter(c => c.parentId === parentId);
+
+                              if (topLevel.length === 0) {
+                                return <p className="text-[11px] text-slate-400 italic text-center py-6">No comments yet. Write the first response!</p>;
+                              }
+
+                              return topLevel.map((corr) => {
+                                const replies = getReplies(corr.id);
+                                return (
+                                  <div key={corr.id} className="space-y-2">
+                                    {/* Top level comment */}
+                                    <div className="bg-slate-50 border border-slate-200/60 p-3 rounded-xl space-y-1.5 shadow-xs">
+                                      <div className="flex items-center justify-between text-[10px]">
+                                        <span className="font-extrabold text-slate-700 font-sans">{corr.author}</span>
+                                        <span className="text-[9px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase">Active Citizen</span>
+                                      </div>
+                                      <p className="text-xs text-slate-600 leading-relaxed font-medium">{corr.text}</p>
+                                      
+                                      {/* Interaction: Upvote and Reply buttons */}
+                                      <div className="flex items-center space-x-3 pt-1 text-[10px] font-bold text-slate-400">
+                                        <button 
+                                          onClick={() => handleVoteComment(selectedIssue.id, corr.id)}
+                                          className="flex items-center space-x-1 hover:text-indigo-600 transition-colors cursor-pointer bg-transparent border-none"
+                                        >
+                                          <ThumbsUp className="h-3 w-3" />
+                                          <span>{corr.upvotes || 0} Upvotes</span>
+                                        </button>
+                                        <button 
+                                          onClick={() => {
+                                            setReplyingToCommentId(replyingToCommentId === corr.id ? null : corr.id);
+                                            setReplyText("");
+                                          }}
+                                          className="flex items-center space-x-1 hover:text-indigo-600 transition-colors cursor-pointer bg-transparent border-none"
+                                        >
+                                          <MessageSquare className="h-3 w-3" />
+                                          <span>Reply</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Nesting list of replies */}
+                                    {replies.length > 0 && (
+                                      <div className="ml-6 border-l-2 border-indigo-100 pl-3.5 space-y-2">
+                                        {replies.map((reply) => (
+                                          <div key={reply.id} className="bg-indigo-50/30 border border-indigo-100/50 p-2.5 rounded-lg space-y-1 shadow-xs">
+                                            <div className="flex items-center justify-between text-[9px]">
+                                              <span className="font-extrabold text-slate-600 font-sans">{reply.author}</span>
+                                              <span className="text-slate-400 font-bold uppercase">Reply</span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-600 leading-relaxed font-medium">{reply.text}</p>
+                                            
+                                            {/* Vote for reply */}
+                                            <div className="flex items-center space-x-3 pt-0.5 text-[9px] font-bold text-slate-400">
+                                              <button 
+                                                onClick={() => handleVoteComment(selectedIssue.id, reply.id)}
+                                                className="flex items-center space-x-1 hover:text-indigo-600 transition-colors cursor-pointer bg-transparent border-none"
+                                              >
+                                                <ThumbsUp className="h-2.5 w-2.5" />
+                                                <span>{reply.upvotes || 0} Upvotes</span>
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Inline reply form for this comment */}
+                                    {replyingToCommentId === corr.id && (
+                                      <div className="ml-6 flex space-x-2 pt-1">
+                                        <input 
+                                          type="text" 
+                                          placeholder={`Reply to ${corr.author}...`}
+                                          value={replyText}
+                                          onChange={(e) => setReplyText(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              handleAddCorroboration(selectedIssue.id, corr.id, replyText);
+                                              setReplyingToCommentId(null);
+                                              setReplyText("");
+                                            }
+                                          }}
+                                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            handleAddCorroboration(selectedIssue.id, corr.id, replyText);
+                                            setReplyingToCommentId(null);
+                                            setReplyText("");
+                                          }}
+                                          className="px-3 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors rounded-lg text-[10px] font-bold uppercase cursor-pointer border-none"
+                                        >
+                                          Reply
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : (
+                  // Desktop Active Tab View
+                  <motion.div
+                    key="active-tab-desktop"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="h-full animate-none"
+                  >
+                    {activeTab === "home" && (
+                      <HomeView 
+                        user={userProfile || DEFAULT_USER}
+                        issues={issues}
+                        onSelectIssue={(issue) => setSelectedIssue(issue)}
+                        onVote={handleVote}
+                        onNavigateToTab={setActiveTab}
+                        onSignUpClick={() => {
+                          setAuthMode('signup');
+                          setShowAuthModal(true);
+                        }}
+                      />
+                    )}
+                    {activeTab === "maps" && <MapsView issues={issues} isMobile={false} />}
+                    {activeTab === "report" && (
+                      <ReportView 
+                        onAddIssue={() => {
+                          loadAllData();
+                          setActiveTab("home");
+                        }}
+                      />
+                    )}
+                    {activeTab === "campaigns" && (
+                      <CampaignsView 
+                        user={userProfile || DEFAULT_USER}
+                        campaigns={campaigns}
+                        onDonate={handleDonateEscrow}
+                        onVerifyStep={handleVerifyStep}
+                        onSimulate90Days={handleSimulate90Days}
+                      />
+                    )}
+                    {activeTab === "profile" && (
+                      <ProfileView 
+                        user={userProfile || DEFAULT_USER}
+                        citizen={citizenProfile || DEFAULT_USER}
+                        org={orgProfile || DEFAULT_ORG}
+                        onToggleRole={handleToggleRole}
+                      />
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans antialiased py-6 px-4 flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-slate-50 lg:bg-slate-100 text-slate-800 font-sans antialiased lg:py-6 lg:px-4 flex flex-col items-center justify-center relative overflow-hidden">
       
       {/* Decorative blurred circles for atmosphere */}
-      <div className="absolute top-[10%] left-[20%] w-[320px] h-[320px] bg-indigo-100/40 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-[10%] right-[20%] w-[350px] h-[350px] bg-slate-200/50 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-[10%] left-[20%] w-[320px] h-[320px] bg-indigo-100/40 rounded-full blur-3xl pointer-events-none lg:block hidden" />
+      <div className="absolute bottom-[10%] right-[20%] w-[350px] h-[350px] bg-slate-200/50 rounded-full blur-3xl pointer-events-none lg:block hidden" />
 
       {/* Main mobile viewport emulator shell container */}
-      <div className="w-full max-w-[440px] h-[860px] rounded-[36px] bg-white border-4 border-slate-300 shadow-2xl relative flex flex-col overflow-hidden">
+      <div className="w-full h-screen lg:h-[860px] lg:max-w-[440px] lg:rounded-[36px] bg-white lg:border-4 lg:border-slate-300 lg:shadow-2xl relative flex flex-col overflow-hidden">
         
         {/* Mobile speaker notch / status bar details */}
-        <div className="w-full bg-slate-50 h-7 flex items-center justify-between px-6 z-30 select-none border-b border-slate-100">
+        <div className="w-full bg-slate-50 h-7 flex items-center justify-between px-6 z-30 select-none border-b border-slate-100 lg:flex hidden">
           <span className="text-[10px] font-bold font-mono text-slate-400">14:32 IST</span>
           <div className="w-20 h-4 bg-slate-200 rounded-full flex items-center justify-center">
             <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />

@@ -726,7 +726,7 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
   const listFeedItems = filteredIssuesList;
 
   return (
-    <div className="relative w-full h-[712px] bg-[#FAF2EB] overflow-hidden flex flex-col font-sans select-none text-[#1e293b]">
+    <div className="relative w-full h-full bg-[#FAF2EB] overflow-hidden flex flex-col font-sans select-none text-[#1e293b]">
       
       {/* 2. FILTER & SECTOR SELECTORS BAR (Strictly matching the layout of the screenshots) */}
       <div className="bg-white border-b border-slate-100 p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-40 shadow-sm relative">
