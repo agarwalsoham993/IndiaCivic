@@ -377,12 +377,141 @@ const INITIAL_CAMPAIGNS: Campaign[] = [
   }
 ];
 
+const SEED_PROFILES: UserProfile[] = [
+  {
+    id: "user-karan-goel",
+    name: "Karan_Goel",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=karan",
+    location: "Indiranagar, Bengaluru",
+    role: "CITIZEN",
+    civicScore: 840,
+    totalPoints: 2950,
+    personalActiveScore: 90,
+    contributionCount: 58,
+    citizensHelped: 1800,
+    totalDonations: 4000,
+    pointsBreakdown: { reporting: 1500, verifying: 1000, donating: 450 },
+    badges: ["Grand Guardian", "Streak Champion"],
+    streakDays: 12,
+    availableFunds: 1000
+  },
+  {
+    id: "user-meera-nair",
+    name: "Meera_Nair",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=meera",
+    location: "Indiranagar, Bengaluru",
+    role: "CITIZEN",
+    civicScore: 810,
+    totalPoints: 2710,
+    personalActiveScore: 88,
+    contributionCount: 45,
+    citizensHelped: 1100,
+    totalDonations: 3000,
+    pointsBreakdown: { reporting: 1200, verifying: 800, donating: 710 },
+    badges: ["Clean Ward Hero", "First Responder"],
+    streakDays: 8,
+    availableFunds: 1500
+  },
+  {
+    id: "user-suresh-k",
+    name: "Suresh_K",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=suresh",
+    location: "Domlur, Bengaluru",
+    role: "CITIZEN",
+    civicScore: 710,
+    totalPoints: 1620,
+    personalActiveScore: 75,
+    contributionCount: 22,
+    citizensHelped: 800,
+    totalDonations: 1500,
+    pointsBreakdown: { reporting: 700, verifying: 500, donating: 420 },
+    badges: ["Local Sentinel", "Verified Eye"],
+    streakDays: 5,
+    availableFunds: 500
+  },
+  {
+    id: "user-ananya-k",
+    name: "Ananya_K",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=ananya",
+    location: "Indiranagar, Bengaluru",
+    role: "CITIZEN",
+    civicScore: 680,
+    totalPoints: 950,
+    personalActiveScore: 65,
+    contributionCount: 15,
+    citizensHelped: 400,
+    totalDonations: 500,
+    pointsBreakdown: { reporting: 450, verifying: 300, donating: 200 },
+    badges: ["Active Citizen"],
+    streakDays: 3,
+    availableFunds: 800
+  },
+  {
+    id: "org-green-bengaluru",
+    name: "Green_Bengaluru_RWA",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=green",
+    location: "Bengaluru, National Zone",
+    role: "ORGANIZATION",
+    civicScore: 950,
+    totalPoints: 45900,
+    personalActiveScore: 98,
+    contributionCount: 840,
+    citizensHelped: 125000,
+    totalDonations: 250000,
+    pointsBreakdown: { reporting: 20000, verifying: 15000, donating: 10900 },
+    badges: ["National Legend", "CSR Platinum Partner"],
+    streakDays: 45,
+    adoptedWards: ["Ward 88 - Indiranagar", "Ward 12 - Koramangala"],
+    carbonCredits: 55000,
+    availableFunds: 45000
+  },
+  {
+    id: "org-tata-csr",
+    name: "Tata CSR Sanitation",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=tata",
+    location: "Indiranagar, Bengaluru",
+    role: "ORGANIZATION",
+    civicScore: 890,
+    totalPoints: 7200,
+    personalActiveScore: 90,
+    contributionCount: 120,
+    citizensHelped: 10800,
+    totalDonations: 80000,
+    pointsBreakdown: { reporting: 3000, verifying: 2500, donating: 1700 },
+    badges: ["Eco Guardian", "Ward Adoptive Leader"],
+    streakDays: 20,
+    adoptedWards: ["Ward 88 - Indiranagar"],
+    carbonCredits: 10800,
+    availableFunds: 25000
+  },
+  {
+    id: "org-indiranagar-rotary",
+    name: "Indiranagar Rotary Club",
+    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=rotary",
+    location: "Indiranagar, Bengaluru",
+    role: "ORGANIZATION",
+    civicScore: 850,
+    totalPoints: 4100,
+    personalActiveScore: 82,
+    contributionCount: 65,
+    citizensHelped: 5400,
+    totalDonations: 35000,
+    pointsBreakdown: { reporting: 1800, verifying: 1300, donating: 1000 },
+    badges: ["Ward Adoptive Leader", "Gold ESG Rating"],
+    streakDays: 14,
+    adoptedWards: ["Ward 88 - Indiranagar"],
+    carbonCredits: 5400,
+    availableFunds: 12000
+  }
+];
+
 interface DbSchema {
   issues: Issue[];
   campaigns: Campaign[];
   activeUserProfile: UserProfile;
   citizenProfile: UserProfile;
   orgProfile: UserProfile;
+  profiles?: { [uid: string]: UserProfile };
 }
 
 function loadDatabase(): DbSchema {
@@ -396,12 +525,20 @@ function loadDatabase(): DbSchema {
   }
 
   // Write default seed database
+  const dbProfiles: { [uid: string]: UserProfile } = {};
+  for (const p of SEED_PROFILES) {
+    dbProfiles[p.id] = p;
+  }
+  dbProfiles["user-rahul-sharma"] = DEFAULT_USER;
+  dbProfiles["org-green-ward"] = DEFAULT_ORG;
+
   const db: DbSchema = {
     issues: INITIAL_ISSUES,
     campaigns: INITIAL_CAMPAIGNS,
     activeUserProfile: DEFAULT_USER,
     citizenProfile: DEFAULT_USER,
     orgProfile: DEFAULT_ORG,
+    profiles: dbProfiles,
   };
   saveDatabase(db);
   return db;
@@ -419,11 +556,17 @@ async function syncFromFirestore() {
     const campaignsSnap = await getDocs(campaignsRef);
     
     const profilesRef = collection(firestore, "profiles");
+    const profilesSnap = await getDocs(profilesRef);
+    const profilesDict: { [uid: string]: UserProfile } = {};
+    profilesSnap.forEach((d) => {
+      profilesDict[d.id] = d.data() as UserProfile;
+    });
+
     const activeUserDoc = await getDoc(doc(profilesRef, "activeUserProfile"));
     const citizenDoc = await getDoc(doc(profilesRef, "citizenProfile"));
     const orgDoc = await getDoc(doc(profilesRef, "orgProfile"));
 
-    if (!issuesSnap.empty || !campaignsSnap.empty || activeUserDoc.exists()) {
+    if (!issuesSnap.empty || !campaignsSnap.empty || !profilesSnap.empty) {
       console.log("Found existing data in Firestore. Loading into local cache...");
       const issuesList: Issue[] = [];
       issuesSnap.forEach((d) => {
@@ -449,6 +592,15 @@ async function syncFromFirestore() {
       });
       campaignsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+      // Ensure seed profiles are written to Firestore if missing
+      for (const p of SEED_PROFILES) {
+        if (!profilesDict[p.id]) {
+          console.log(`Sync Seeding missing profile to Firestore: ${p.name}`);
+          await setDoc(doc(firestore, "profiles", p.id), p);
+          profilesDict[p.id] = p;
+        }
+      }
+
       const activeUserProfile = activeUserDoc.exists() ? (activeUserDoc.data() as UserProfile) : DEFAULT_USER;
       const citizenProfile = citizenDoc.exists() ? (citizenDoc.data() as UserProfile) : DEFAULT_USER;
       const orgProfile = orgDoc.exists() ? (orgDoc.data() as UserProfile) : DEFAULT_ORG;
@@ -459,6 +611,7 @@ async function syncFromFirestore() {
         activeUserProfile,
         citizenProfile,
         orgProfile,
+        profiles: profilesDict,
       };
 
       fs.writeFileSync(DATA_FILE, JSON.stringify(loadedDb, null, 2), "utf-8");
@@ -466,12 +619,21 @@ async function syncFromFirestore() {
       console.log("Local cache synchronized with Firestore successfully!");
     } else {
       console.log("Firestore database is empty. Seeding initial data to Firestore...");
+      
+      const seedProfilesDict: { [uid: string]: UserProfile } = {};
+      for (const p of SEED_PROFILES) {
+        seedProfilesDict[p.id] = p;
+      }
+      seedProfilesDict["user-rahul-sharma"] = DEFAULT_USER;
+      seedProfilesDict["org-green-ward"] = DEFAULT_ORG;
+
       const initialDb: DbSchema = {
         issues: INITIAL_ISSUES,
         campaigns: INITIAL_CAMPAIGNS,
         activeUserProfile: DEFAULT_USER,
         citizenProfile: DEFAULT_USER,
         orgProfile: DEFAULT_ORG,
+        profiles: seedProfilesDict,
       };
       await syncToFirestore(initialDb);
     }
@@ -491,6 +653,13 @@ async function syncToFirestore(targetDb: DbSchema) {
     await setDoc(doc(firestore, "profiles", "activeUserProfile"), targetDb.activeUserProfile);
     await setDoc(doc(firestore, "profiles", "citizenProfile"), targetDb.citizenProfile);
     await setDoc(doc(firestore, "profiles", "orgProfile"), targetDb.orgProfile);
+    
+    // Also save all other cached user profiles
+    if (targetDb.profiles) {
+      for (const [uid, profile] of Object.entries(targetDb.profiles)) {
+        await setDoc(doc(firestore, "profiles", uid), profile);
+      }
+    }
     console.log("Firestore actual database updated successfully.");
   } catch (err) {
     console.error("Error during Firestore syncToFirestore:", err);
@@ -523,6 +692,35 @@ syncFromFirestore();
 app.get("/api/issues", (req, res) => {
   db = loadDatabase();
   res.json(db.issues);
+});
+
+// Proxy route for CORS-free reverse geocoding
+app.get("/api/reverse-geocode", async (req, res) => {
+  const { lat, lng } = req.query;
+  if (!lat || !lng) {
+    return res.status(400).json({ error: "Missing lat or lng" });
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "IndiaCivic-Applet-Server/1.0 (agarwalsoham993@gmail.com)",
+        "Accept-Language": "en"
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return res.json(data);
+    } else {
+      console.warn("Nominatim reverse geocode failed with status:", response.status);
+      return res.status(502).json({ error: `Geocoding service returned status ${response.status}` });
+    }
+  } catch (error: any) {
+    console.error("Error in reverse geocoding proxy:", error);
+    return res.status(500).json({ error: "Internal geocoding error: " + error.message });
+  }
 });
 
 // Create a new issue (with geo-clustering and optional Gemini AI analysis)
@@ -1230,6 +1428,65 @@ app.post("/api/profile/toggle", (req, res) => {
   res.json({ success: true, activeUser: db.activeUserProfile });
 });
 
+// Fetch actual leaderboard profiles from database
+app.get("/api/leaderboard", async (req, res) => {
+  db = loadDatabase();
+  try {
+    const profilesRef = collection(firestore, "profiles");
+    const profilesSnap = await getDocs(profilesRef);
+    const users: UserProfile[] = [];
+
+    profilesSnap.forEach((docSnap) => {
+      const p = docSnap.data() as UserProfile;
+      // Filter out special profiles and guests
+      if (
+        p.id &&
+        p.id !== "activeUserProfile" &&
+        p.id !== "citizenProfile" &&
+        p.id !== "orgProfile" &&
+        p.id !== "guest"
+      ) {
+        users.push(p);
+      }
+    });
+
+    // Fallback to local profiles if firestore has no documents
+    if (users.length === 0 && db.profiles) {
+      Object.entries(db.profiles).forEach(([uid, p]) => {
+        if (
+          uid !== "activeUserProfile" &&
+          uid !== "citizenProfile" &&
+          uid !== "orgProfile" &&
+          uid !== "guest"
+        ) {
+          users.push(p);
+        }
+      });
+    }
+
+    // Sort by points descending
+    users.sort((a, b) => b.totalPoints - a.totalPoints);
+    res.json(users);
+  } catch (err) {
+    console.error("Error fetching leaderboard from Firestore, using local fallback:", err);
+    const users: UserProfile[] = [];
+    if (db.profiles) {
+      Object.entries(db.profiles).forEach(([uid, p]) => {
+        if (
+          uid !== "activeUserProfile" &&
+          uid !== "citizenProfile" &&
+          uid !== "orgProfile" &&
+          uid !== "guest"
+        ) {
+          users.push(p);
+        }
+      });
+    }
+    users.sort((a, b) => b.totalPoints - a.totalPoints);
+    res.json(users);
+  }
+});
+
 // Random Username Generator to maintain citizen anonymity
 const ADJECTIVES = ["Civic", "Urban", "Green", "Vigilant", "Eco", "Clean", "Safety", "Smart", "Active", "Worthy", "Proud", "Noble", "Kind", "Elite", "Swift", "Caring", "Bold", "Honored", "Wired", "Local", "Global", "Metro", "Cosmic", "Secure"];
 const NOUNS = ["Citizen", "Neighbor", "Guardian", "Warrior", "Hero", "Sentinel", "Sheriff", "Sentry", "EcoWarrior", "Patriot", "Resident", "Saviour", "Ally", "Advocate", "Steward", "Leader", "Friend", "Pioneer", "Volunteer"];
@@ -1297,6 +1554,12 @@ app.post("/api/profile/login", async (req, res) => {
     } else {
       db.orgProfile = userProfile;
     }
+    
+    if (!db.profiles) {
+      db.profiles = {};
+    }
+    db.profiles[uid] = userProfile;
+
     saveDatabase(db);
     
     res.json({ 
@@ -1337,6 +1600,90 @@ app.post("/api/profile/logout", (req, res) => {
   };
   saveDatabase(db);
   res.json({ success: true, activeUser: db.activeUserProfile });
+});
+
+// --------------------------------------------------------
+// Real Automated WhatsApp Bot Integration Webhook
+// --------------------------------------------------------
+app.post("/webhook/whatsapp-trigger", async (req, res) => {
+  db = loadDatabase();
+  try {
+    const { reporterUid, reporterName, parsedPayload } = req.body;
+    if (!parsedPayload || !parsedPayload.title) {
+      return res.status(400).json({ error: "Missing parsed payload or title in whatsapp-trigger request" });
+    }
+
+    const issueId = "issue_" + Date.now();
+    const trackingId = parsedPayload.trackingId || `CIVIC-${Math.floor(100000 + Math.random() * 900000)}`;
+    const newIssue: Issue = {
+      id: issueId,
+      trackingId: trackingId,
+      category: parsedPayload.category || "Waste Management",
+      title: parsedPayload.title,
+      description: parsedPayload.description || "",
+      locationName: parsedPayload.locationName || "Indiranagar, Bengaluru",
+      latitude: Number(parsedPayload.latitude) || 12.9716,
+      longitude: Number(parsedPayload.longitude) || 77.6412,
+      timestamp: new Date().toISOString(),
+      status: "PENDING",
+      severity: Number(parsedPayload.severity) || 3,
+      imageUrl: parsedPayload.imageUrl || "",
+      isAnonymous: parsedPayload.isAnonymous || false,
+      reporterName: reporterName || "WhatsApp Citizen",
+      virtualAssetId: "sector-2",
+      upvotes: 0,
+      agreeVotes: 0,
+      disagreeVotes: 0,
+      votedUserIds: [],
+      evidenceLinks: parsedPayload.evidenceLinks || [],
+      corroborations: [],
+      ward: parsedPayload.ward || "Indiranagar Ward 88",
+      department: parsedPayload.department || "BBMP Solid Waste Management",
+      representative: parsedPayload.representative || "Ward Corporator",
+      reporterId: reporterUid || "guest"
+    };
+
+    db.issues.unshift(newIssue);
+
+    // Reward points
+    if (reporterUid && reporterUid !== "guest") {
+      if (db.profiles && db.profiles[reporterUid]) {
+        db.profiles[reporterUid].totalPoints += 50;
+        db.profiles[reporterUid].contributionCount += 1;
+        if (!db.profiles[reporterUid].pointsBreakdown) {
+          db.profiles[reporterUid].pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
+        }
+        db.profiles[reporterUid].pointsBreakdown.reporting += 50;
+      }
+      if (db.activeUserProfile && db.activeUserProfile.id === reporterUid) {
+        db.activeUserProfile.totalPoints += 50;
+        db.activeUserProfile.contributionCount += 1;
+        if (!db.activeUserProfile.pointsBreakdown) {
+          db.activeUserProfile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
+        }
+        db.activeUserProfile.pointsBreakdown.reporting += 50;
+      }
+    }
+
+    saveDatabase(db);
+
+    try {
+      await setDoc(doc(firestore, "issues", issueId), newIssue);
+      if (reporterUid && reporterUid !== "guest" && db.profiles && db.profiles[reporterUid]) {
+        await setDoc(doc(firestore, "profiles", reporterUid), db.profiles[reporterUid]);
+      }
+      if (db.activeUserProfile && db.activeUserProfile.id === reporterUid) {
+        await setDoc(doc(firestore, "profiles", "activeUserProfile"), db.activeUserProfile);
+      }
+    } catch (e) {
+      console.error("Firestore sync error in whatsapp-trigger:", e);
+    }
+
+    res.json({ success: true, message: "Issue logged successfully via WhatsApp bot", issueId, trackingId });
+  } catch (err: any) {
+    console.error("Error processing whatsapp-trigger webhook:", err);
+    res.status(500).json({ error: "Internal processing error", details: err.message });
+  }
 });
 
 // --------------------------------------------------------

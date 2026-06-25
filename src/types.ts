@@ -54,6 +54,7 @@ export interface Issue {
     aiConfidence?: string;
     aiAnalysisLog?: string;
   };
+  reporterId?: string;
 }
 
 export interface Donation {

@@ -32,36 +32,69 @@ interface ProfileViewProps {
   citizen: UserProfile;
   org: UserProfile;
   onToggleRole: (targetRole: 'CITIZEN' | 'ORGANIZATION') => void;
+  leaderboardUsers?: UserProfile[];
 }
 
-export default function ProfileView({ user, citizen, org, onToggleRole }: ProfileViewProps) {
+export default function ProfileView({ user, citizen, org, onToggleRole, leaderboardUsers }: ProfileViewProps) {
   const [selectedLeaderboard, setSelectedLeaderboard] = useState<"ward" | "city" | "national">("ward");
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Sample leaderboards
-  const leaderboards = {
-    ward: [
-      { rank: 1, name: "Karan_Goel", points: 2950, badge: "Grand Guardian" },
-      { rank: 2, name: "Meera_Nair", points: 2710, badge: "Clean Ward Hero" },
-      { rank: 3, name: "Rahul Sharma", points: 1850, badge: "Vigilant Eye", isUser: true },
-      { rank: 4, name: "Suresh_K", points: 1620, badge: "Local Sentinel" },
-    ],
-    city: [
-      { rank: 1, name: "Ramesh_BBMP_Liaison", points: 8450, badge: "City Champion" },
-      { rank: 12, name: "Rahul Sharma", points: 1850, badge: "Vigilant Eye", isUser: true },
-      { rank: 50, name: "Ananya_K", points: 950, badge: "Active Citizen" },
-    ],
-    national: [
-      { rank: 1, name: "Green_Bengaluru_RWA", points: 45900, badge: "National Legend" },
-      { rank: 248, name: "Rahul Sharma", points: 1850, badge: "Vigilant Eye", isUser: true },
-    ]
+  // Determine if database leaderboard data is loaded
+  const hasDbUsers = leaderboardUsers && leaderboardUsers.length > 0;
+
+  // Build the active user list ensuring the current user is included
+  let activeUsersList = leaderboardUsers ? [...leaderboardUsers] : [];
+  if (user && user.id && user.id !== 'guest' && !activeUsersList.some(u => u.id === user.id)) {
+    activeUsersList.push(user);
+  }
+
+  // Filter citizens and organizations
+  const dbCitizens = activeUsersList.filter(p => p.role === "CITIZEN");
+  const dbOrgs = activeUsersList.filter(p => p.role === "ORGANIZATION");
+
+  const getLeaderboardList = (profiles: UserProfile[]) => {
+    return profiles
+      .slice()
+      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .map((p, index) => ({
+        rank: index + 1,
+        name: p.name,
+        points: p.totalPoints,
+        badge: p.badges && p.badges.length > 0 ? p.badges[0] : "Active Citizen",
+        isUser: p.id === user.id,
+        credits: p.carbonCredits ? `${p.carbonCredits.toLocaleString()} C` : "0 C"
+      }));
   };
 
-  const orgLeaderboard = [
-    { rank: 1, name: "Green Ward Foundation", points: 8500, credits: "12,450 C", isUser: true },
-    { rank: 2, name: "Tata CSR Sanitation", points: 7200, credits: "10,800 C" },
-    { rank: 3, name: "Indiranagar Rotary Club", points: 4100, credits: "5,400 C" },
-  ];
+  // Ward leaderboard filter (same location or Indiranagar, Bengaluru)
+  const wardCitizens = dbCitizens.filter(p => 
+    p.location === user.location || 
+    p.location?.includes("Indiranagar") || 
+    p.id === user.id
+  );
+
+  // City leaderboard filter (same city or Indiranagar/Bengaluru)
+  const cityCitizens = dbCitizens.filter(p => 
+    p.location?.includes("Bengaluru") || 
+    p.location?.includes("Indiranagar") || 
+    p.id === user.id
+  );
+
+  const dynamicLeaderboards = {
+    ward: getLeaderboardList(wardCitizens),
+    city: getLeaderboardList(cityCitizens),
+    national: getLeaderboardList(dbCitizens)
+  };
+
+  const dynamicOrgLeaderboard = getLeaderboardList(dbOrgs);
+
+  const finalLeaderboards = {
+    ward: dynamicLeaderboards.ward,
+    city: dynamicLeaderboards.city,
+    national: dynamicLeaderboards.national,
+  };
+
+  const finalOrgLeaderboard = dynamicOrgLeaderboard;
 
   return (
     <div className="space-y-6 pb-24 text-left">
@@ -216,25 +249,31 @@ export default function ProfileView({ user, citizen, org, onToggleRole }: Profil
             </div>
 
             <div className="space-y-2 text-xs">
-              {leaderboards[selectedLeaderboard].map((entry: any) => (
-                <div 
-                  key={entry.rank}
-                  className={`flex items-center justify-between p-2.5 rounded-xl border ${
-                    entry.isUser 
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold shadow-sm" 
-                      : "bg-slate-50 border-transparent text-slate-600"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono font-bold w-4">#{entry.rank}</span>
-                    <span className="font-bold">{entry.name}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] text-slate-400">{entry.badge}</span>
-                    <span className="font-extrabold text-slate-800">{entry.points} XP</span>
-                  </div>
+              {finalLeaderboards[selectedLeaderboard].length === 0 ? (
+                <div className="text-center py-6 text-slate-400 font-bold bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                  Loading active citizens from actual database...
                 </div>
-              ))}
+              ) : (
+                finalLeaderboards[selectedLeaderboard].map((entry: any) => (
+                  <div 
+                    key={entry.rank}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border ${
+                      entry.isUser 
+                        ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold shadow-sm" 
+                        : "bg-slate-50 border-transparent text-slate-600"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono font-bold w-4">#{entry.rank}</span>
+                      <span className="font-bold">{entry.name}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] text-slate-400">{entry.badge}</span>
+                      <span className="font-extrabold text-slate-800">{entry.points} XP</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Generate shareable card trigger */}
@@ -329,25 +368,31 @@ export default function ProfileView({ user, citizen, org, onToggleRole }: Profil
             <h4 className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Top Performing Organizations</h4>
             
             <div className="space-y-2 text-xs">
-              {orgLeaderboard.map((entry) => (
-                <div 
-                  key={entry.rank}
-                  className={`flex items-center justify-between p-2.5 rounded-xl border ${
-                    entry.isUser 
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold shadow-sm" 
-                      : "bg-slate-50 border-transparent text-slate-600"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono font-bold w-4">#{entry.rank}</span>
-                    <span className="font-bold">{entry.name}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] text-emerald-600 font-bold">{entry.credits}</span>
-                    <span className="font-extrabold text-slate-800">{entry.points} pts</span>
-                  </div>
+              {finalOrgLeaderboard.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 font-bold bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                  Loading top organizations from actual database...
                 </div>
-              ))}
+              ) : (
+                finalOrgLeaderboard.map((entry) => (
+                  <div 
+                    key={entry.rank}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border ${
+                      entry.isUser 
+                        ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold shadow-sm" 
+                        : "bg-slate-50 border-transparent text-slate-600"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono font-bold w-4">#{entry.rank}</span>
+                      <span className="font-bold">{entry.name}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] text-emerald-600 font-bold">{entry.credits}</span>
+                      <span className="font-extrabold text-slate-800">{entry.points} pts</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -363,9 +408,9 @@ export default function ProfileView({ user, citizen, org, onToggleRole }: Profil
           >
             <button 
               onClick={() => setShowShareModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer bg-transparent border-none"
+              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4.5 w-4.5" />
             </button>
 
             {/* Impact Card Content Layout */}

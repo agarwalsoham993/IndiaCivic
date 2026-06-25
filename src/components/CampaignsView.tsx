@@ -503,9 +503,9 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
           >
             <button 
               onClick={() => setSelectedReceipt(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer bg-transparent border-none"
+              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4.5 w-4.5" />
             </button>
 
             <div className="text-center border-b border-slate-100 pb-4">

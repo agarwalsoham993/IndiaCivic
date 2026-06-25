@@ -32,7 +32,12 @@ import {
   Trash2,
   Lightbulb,
   Droplet,
-  Wrench
+  Wrench,
+  ThumbsUp,
+  MessageSquare,
+  Send,
+  Camera,
+  CheckSquare
 } from "lucide-react";
 import { APIProvider, Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
 import { Issue } from "../types";
@@ -150,6 +155,11 @@ interface SectorData {
 interface MapsViewProps {
   issues?: Issue[];
   isMobile?: boolean;
+  onSelectIssue?: (issue: Issue) => void;
+  userProfile?: any;
+  onRefreshData?: () => void;
+  setAuthMode?: (mode: "login" | "signup" | null) => void;
+  setShowAuthModal?: (show: boolean) => void;
 }
 
 // Unified interface for clusters
@@ -167,7 +177,41 @@ interface MapCluster {
   issues?: Issue[];
 }
 
-export default function MapsView({ issues = [], isMobile = false }: MapsViewProps) {
+const ALL_STATES = [
+  "Karnataka", "Maharashtra", "Delhi", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Kerala", "Madhya Pradesh", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Jammu & Kashmir", "Ladakh", "Puducherry"
+];
+
+const getIssueState = (iss: any): string => {
+  const loc = (iss.locationName || "").toLowerCase();
+  if (loc.includes("bengaluru") || loc.includes("bangalore") || loc.includes("karnataka")) {
+    return "Karnataka";
+  }
+  if (loc.includes("mumbai") || loc.includes("bombay") || loc.includes("maharashtra") || loc.includes("bandra") || loc.includes("carter")) {
+    return "Maharashtra";
+  }
+  if (loc.includes("delhi") || loc.includes("ncr") || loc.includes("new delhi")) {
+    return "Delhi";
+  }
+  // Check lat/lng fallback
+  const lat = Number(iss.latitude);
+  const lng = Number(iss.longitude);
+  if (!isNaN(lat) && !isNaN(lng)) {
+    if (Math.abs(lat - 12.97) < 1.5 && Math.abs(lng - 77.59) < 1.5) return "Karnataka";
+    if (Math.abs(lat - 19.07) < 1.5 && Math.abs(lng - 72.87) < 1.5) return "Maharashtra";
+    if (Math.abs(lat - 28.61) < 1.5 && Math.abs(lng - 77.20) < 1.5) return "Delhi";
+  }
+  return "Karnataka"; // fallback
+};
+
+export default function MapsView({ 
+  issues = [], 
+  isMobile = false, 
+  onSelectIssue,
+  userProfile,
+  onRefreshData,
+  setAuthMode,
+  setShowAuthModal
+}: MapsViewProps) {
   const [activeTab, setActiveTab] = useState<"map" | "list">("map");
   const [severityFilter, setSeverityFilter] = useState<"all" | "high" | "med" | "low">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "PENDING" | "IN_PROGRESS" | "RESOLVED">("all");
@@ -176,6 +220,26 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
   const [selectedSector, setSelectedSector] = useState<string>("sector-2");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"real" | "vector">(hasValidKey ? "real" : "vector");
+  
+  // State selection and search States
+  const [selectedStates, setSelectedStates] = useState<string[]>(ALL_STATES);
+  const [isStateDropdownOpen, setIsStateDropdownOpen] = useState(false);
+  const [stateSearchQuery, setStateSearchQuery] = useState("");
+  const [activeSearchedState, setActiveSearchedState] = useState("");
+  const stateDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Click outside to close state dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (stateDropdownRef.current && !stateDropdownRef.current.contains(event.target as Node)) {
+        setIsStateDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   
   // Scannable QR modal
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -194,14 +258,215 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
     }
   }, [selectedCluster]);
 
+  useEffect(() => {
+    setIsResolving(false);
+    setResolutionPhoto(null);
+    setResolutionDesc("");
+    setResolutionError("");
+    setResolutionSuccessMsg("");
+    setCommentText("");
+    setReplyText("");
+    setReplyingToCommentId(null);
+  }, [activeIssueId]);
+
   const activeIssue = useMemo(() => {
-    if (!selectedCluster || !selectedCluster.issues || selectedCluster.issues.length === 0) return null;
+    if (!selectedCluster) return null;
+    const freshIssue = issues.find(iss => iss.id === activeIssueId);
+    if (freshIssue) return freshIssue;
+    if (!selectedCluster.issues || selectedCluster.issues.length === 0) return null;
     return selectedCluster.issues.find(iss => iss.id === activeIssueId) || selectedCluster.issues[0];
-  }, [selectedCluster, activeIssueId]);
+  }, [issues, selectedCluster, activeIssueId]);
+
+  // Local states for interactive modal actions
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolutionPhoto, setResolutionPhoto] = useState<string | null>(null);
+  const [resolutionDesc, setResolutionDesc] = useState("");
+  const [resolutionLoading, setResolutionLoading] = useState(false);
+  const [resolutionError, setResolutionError] = useState("");
+  const [resolutionSuccessMsg, setResolutionSuccessMsg] = useState("");
+
+  const [commentText, setCommentText] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Local action handlers for maps details modal/panel
+  const handleLocalVote = async (issueId: string) => {
+    if (!userProfile || userProfile.id === "guest") {
+      if (setAuthMode && setShowAuthModal) {
+        setAuthMode("signup");
+        setShowAuthModal(true);
+      }
+      return;
+    }
+    try {
+      const response = await fetch(`/api/issues/${issueId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voteType: "UPVOTE",
+          userId: userProfile.id,
+          mediaBase64: undefined,
+          mediaText: undefined
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        if (onRefreshData) onRefreshData();
+      } else {
+        alert(data.error || "Failed to submit vote.");
+      }
+    } catch (err) {
+      console.error("Local upvote error:", err);
+    }
+  };
+
+  const handleLocalResolve = async (issueId: string) => {
+    if (!userProfile || userProfile.id === "guest") {
+      if (setAuthMode && setShowAuthModal) {
+        setAuthMode("signup");
+        setShowAuthModal(true);
+      }
+      return;
+    }
+    setResolutionLoading(true);
+    setResolutionError("");
+    setResolutionSuccessMsg("");
+
+    const submitResolve = async (lat?: number, lng?: number) => {
+      try {
+        const response = await fetch(`/api/issues/${issueId}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resolvedPhoto: resolutionPhoto,
+            resolvedDescription: resolutionDesc,
+            resolvedLatitude: lat,
+            resolvedLongitude: lng,
+            resolvedTimestamp: new Date().toISOString()
+          })
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          setResolutionSuccessMsg("Congratulations! This issue has been verified and successfully resolved. You earned +150 XP points!");
+          setResolutionPhoto(null);
+          setResolutionDesc("");
+          setIsResolving(false);
+          if (onRefreshData) onRefreshData();
+        } else {
+          setResolutionError(data.error || "Failed to resolve issue.");
+        }
+      } catch (err: any) {
+        console.error("Resolution upload error:", err);
+        setResolutionError("Network error. Please try again.");
+      } finally {
+        setResolutionLoading(false);
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        submitResolve(pos.coords.latitude, pos.coords.longitude);
+      },
+      (err) => {
+        console.warn("Using fallback coordinates", err);
+        submitResolve(activeIssue?.latitude, activeIssue?.longitude);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  };
+
+  const handleLocalAddComment = async (issueId: string, parentId?: string, customText?: string) => {
+    if (!userProfile || userProfile.id === "guest") {
+      if (setAuthMode && setShowAuthModal) {
+        setAuthMode("signup");
+        setShowAuthModal(true);
+      }
+      return;
+    }
+    const textToSend = customText !== undefined ? customText : commentText;
+    if (!textToSend.trim()) return;
+
+    setSubmittingComment(true);
+    try {
+      const response = await fetch(`/api/issues/${issueId}/corroborate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          author: userProfile.name || "Anonymous Neighbor",
+          avatar: userProfile.avatar || undefined,
+          text: textToSend,
+          parentId: parentId || undefined
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        if (customText === undefined) {
+          setCommentText("");
+        }
+        setReplyText("");
+        setReplyingToCommentId(null);
+        if (onRefreshData) onRefreshData();
+      }
+    } catch (err) {
+      console.error("Add comment error:", err);
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleLocalVoteComment = async (issueId: string, commentId: string) => {
+    if (!userProfile || userProfile.id === "guest") {
+      if (setAuthMode && setShowAuthModal) {
+        setAuthMode("signup");
+        setShowAuthModal(true);
+      }
+      return;
+    }
+    try {
+      const response = await fetch(`/api/issues/${issueId}/comments/${commentId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userProfile.id })
+      });
+      const data = await response.json();
+      if (data.success) {
+        if (onRefreshData) onRefreshData();
+      }
+    } catch (err) {
+      console.error("Vote comment error:", err);
+    }
+  };
 
   // Controlled Google Maps camera state
   const [mapCenter, setMapCenter] = useState({ lat: 12.9719, lng: 77.6112 });
   const [mapZoom, setMapZoom] = useState(13);
+
+  // Auto-center and zoom out when multiple states are selected to show all reports combined
+  useEffect(() => {
+    if (selectedStates.length === 0) return;
+
+    const centers: { lat: number; lng: number }[] = [];
+    if (selectedStates.includes("Karnataka")) {
+      centers.push({ lat: 12.9719, lng: 77.6112 });
+    }
+    if (selectedStates.includes("Maharashtra")) {
+      centers.push({ lat: 19.0760, lng: 72.8777 });
+    }
+    if (selectedStates.includes("Delhi")) {
+      centers.push({ lat: 28.6139, lng: 77.2090 });
+    }
+
+    if (centers.length === 1) {
+      setMapCenter(centers[0]);
+      setMapZoom(12);
+    } else if (centers.length > 1) {
+      const avgLat = centers.reduce((sum, c) => sum + c.lat, 0) / centers.length;
+      const avgLng = centers.reduce((sum, c) => sum + c.lng, 0) / centers.length;
+      setMapCenter({ lat: avgLat, lng: avgLng });
+      setMapZoom(5); // Zoom out to show whole India / selected states
+    }
+  }, [selectedStates]);
 
   // Fallback Vector map pan and zoom
   const [vectorZoomLevel, setVectorZoomLevel] = useState<number>(3); 
@@ -472,12 +737,18 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
     const threshold = getThreshold(zoom);
     const resultClusters: MapCluster[] = [];
 
-    // Filter out issues with invalid coordinates
+    // Filter by state selection, ignoring proximity constraints to show all reports in selected states combined
     const cityCenter = currentPreset.center;
     const cityIssues = issues.filter(iss => {
       const lat = Number(iss.latitude);
       const lng = Number(iss.longitude);
-      return !isNaN(lat) && !isNaN(lng);
+      if (isNaN(lat) || isNaN(lng)) return false;
+
+      // Filter by state selection
+      const issueState = getIssueState(iss);
+      if (!selectedStates.includes(issueState)) return false;
+
+      return true;
     });
 
     // Apply filtering by severity, status, and category as well
@@ -545,6 +816,34 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
       }
     }
 
+    // Dynamic auto-centering & auto-scaling calculation for fallback Vector Canvas
+    let centerLat = cityCenter.lat;
+    let centerLng = cityCenter.lng;
+    let scaleMultiplier = 4000;
+
+    if (filteredCityIssues.length > 0) {
+      const lats = filteredCityIssues.map(i => Number(i.latitude)).filter(n => !isNaN(n));
+      const lngs = filteredCityIssues.map(i => Number(i.longitude)).filter(n => !isNaN(n));
+      if (lats.length > 0) {
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+
+        const dLatSpan = maxLat - minLat;
+        const dLngSpan = maxLng - minLng;
+        const maxSpan = Math.max(dLatSpan, dLngSpan);
+
+        centerLat = (minLat + maxLat) / 2;
+        centerLng = (minLng + maxLng) / 2;
+
+        if (maxSpan > 0.05) {
+          // Scale down multiplier proportionally to the coordinates span
+          scaleMultiplier = Math.min(4000, 300 / maxSpan);
+        }
+      }
+    }
+
     // Post-process the clusters to define size, color, label, locality, and vector coordinates
     return resultClusters.map((cluster) => {
       const count = cluster.issues.length;
@@ -582,31 +881,43 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
       }
 
       // Project coordinates to 1000x1000 fallback Vector Canvas
-      cluster.x = 500 + (cluster.lng - cityCenter.lng) * 4000;
-      cluster.y = 500 - (cluster.lat - cityCenter.lat) * 4000;
+      cluster.x = 500 + (cluster.lng - centerLng) * scaleMultiplier;
+      cluster.y = 500 - (cluster.lat - centerLat) * scaleMultiplier;
 
       return cluster;
     });
-  }, [issues, viewMode, mapZoom, vectorZoomLevel, currentPreset, severityFilter, statusFilter, categoryFilter]);
+  }, [issues, viewMode, mapZoom, vectorZoomLevel, currentPreset, severityFilter, statusFilter, categoryFilter, selectedStates]);
 
-  // Dynamic calculations of active and total reports from the actual database
+  // Dynamic calculations of active and total reports from the actual database for selected states
   const activeCount = useMemo(() => {
     const validIssues = issues.filter(iss => {
       const lat = Number(iss.latitude);
       const lng = Number(iss.longitude);
-      return !isNaN(lat) && !isNaN(lng);
+      if (isNaN(lat) || isNaN(lng)) return false;
+
+      // Filter by state selection
+      const issueState = getIssueState(iss);
+      if (!selectedStates.includes(issueState)) return false;
+
+      return true;
     });
     return validIssues.filter(iss => iss.status !== "RESOLVED").length;
-  }, [issues]);
+  }, [issues, selectedStates]);
 
   const totalReportsCount = useMemo(() => {
     const validIssues = issues.filter(iss => {
       const lat = Number(iss.latitude);
       const lng = Number(iss.longitude);
-      return !isNaN(lat) && !isNaN(lng);
+      if (isNaN(lat) || isNaN(lng)) return false;
+
+      // Filter by state selection
+      const issueState = getIssueState(iss);
+      if (!selectedStates.includes(issueState)) return false;
+
+      return true;
     });
     return validIssues.length;
-  }, [issues]);
+  }, [issues, selectedStates]);
 
   // Handle Preset drop down selection
   const handleCityChange = (cityKey: "bengaluru" | "mumbai" | "delhi") => {
@@ -616,6 +927,47 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
     setSelectedSector("sector-2");
     setSelectedCluster(null);
   };
+
+  const handleStateSearch = () => {
+    setActiveSearchedState(stateSearchQuery);
+  };
+
+  const handleToggleState = (stateName: string) => {
+    let nextStates: string[];
+    if (selectedStates.includes(stateName)) {
+      nextStates = selectedStates.filter(s => s !== stateName);
+    } else {
+      nextStates = [...selectedStates, stateName];
+      // Proactively switch city map center to matching hub to show data
+      if (stateName === "Karnataka") {
+        handleCityChange("bengaluru");
+      } else if (stateName === "Maharashtra") {
+        handleCityChange("mumbai");
+      } else if (stateName === "Delhi") {
+        handleCityChange("delhi");
+      }
+    }
+    setSelectedStates(nextStates);
+  };
+
+  const handleToggleAllStates = () => {
+    if (selectedStates.length === ALL_STATES.length) {
+      setSelectedStates([]);
+    } else {
+      setSelectedStates(ALL_STATES);
+    }
+  };
+
+  const orderedStates = useMemo(() => {
+    const list = [...ALL_STATES];
+    if (!activeSearchedState) {
+      return list;
+    }
+    const term = activeSearchedState.toLowerCase().trim();
+    const matches = list.filter(s => s.toLowerCase().includes(term));
+    const nonMatches = list.filter(s => !s.toLowerCase().includes(term));
+    return [...matches, ...nonMatches];
+  }, [activeSearchedState]);
 
   // Perform a local query check over major Indian cities
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -684,11 +1036,17 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
   const filteredIssuesList = useMemo(() => {
     let result = [...issues];
     
-    // Filter out issues with invalid coordinates
+    // Filter out issues with invalid coordinates and filter strictly by state selection
     result = result.filter(iss => {
       const lat = Number(iss.latitude);
       const lng = Number(iss.longitude);
-      return !isNaN(lat) && !isNaN(lng);
+      if (isNaN(lat) || isNaN(lng)) return false;
+
+      // Filter by state selection
+      const issueState = getIssueState(iss);
+      if (!selectedStates.includes(issueState)) return false;
+
+      return true;
     });
 
     if (severityFilter !== "all") {
@@ -720,7 +1078,7 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
     }
 
     return result;
-  }, [issues, currentPreset, severityFilter, statusFilter, categoryFilter]);
+  }, [issues, currentPreset, severityFilter, statusFilter, categoryFilter, selectedStates]);
 
   // The list view items are exactly the filtered database issues, with no mock/static reports added
   const listFeedItems = filteredIssuesList;
@@ -730,35 +1088,142 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
       
       {/* 2. FILTER & SECTOR SELECTORS BAR (Strictly matching the layout of the screenshots) */}
       <div className="bg-white border-b border-slate-100 p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-40 shadow-sm relative">
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           {/* Severity Dropdown */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial min-w-0 w-full">
             <select 
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value as any)}
-              className="appearance-none bg-white border border-slate-200 pl-3 pr-8 py-1.5 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm min-w-[120px]"
+              className="appearance-none bg-white border border-slate-200 pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm w-full sm:min-w-[120px]"
             >
               <option value="all">All Severity</option>
               <option value="high">High (4-5)</option>
               <option value="med">Medium (3)</option>
               <option value="low">Low (1-2)</option>
             </select>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-slate-400 absolute right-1.5 sm:right-2.5 top-2.5 pointer-events-none" />
           </div>
 
           {/* Status Dropdown */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial min-w-0 w-full">
             <select 
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="appearance-none bg-white border border-slate-200 pl-3 pr-8 py-1.5 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm min-w-[120px]"
+              className="appearance-none bg-white border border-slate-200 pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm w-full sm:min-w-[120px]"
             >
               <option value="all">All Status</option>
               <option value="PENDING">Pending</option>
               <option value="IN_PROGRESS">In Progress</option>
               <option value="RESOLVED">Resolved</option>
             </select>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-slate-400 absolute right-1.5 sm:right-2.5 top-2.5 pointer-events-none" />
+          </div>
+
+          {/* States Dropdown Filter */}
+          <div className="relative flex-1 sm:flex-initial min-w-0 w-full" ref={stateDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsStateDropdownOpen(!isStateDropdownOpen)}
+              className="appearance-none bg-white border border-slate-200 pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm w-full sm:min-w-[140px] flex items-center justify-between gap-1 text-left relative"
+            >
+              <span className="truncate max-w-[80px] xs:max-w-[105px]">
+                {selectedStates.length === ALL_STATES.length
+                  ? "All States"
+                  : selectedStates.length === 0
+                  ? "No States"
+                  : selectedStates.length === 1
+                  ? selectedStates[0]
+                  : `${selectedStates.length} Selected`}
+              </span>
+              <ChevronDown className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-slate-400 absolute right-1.5 sm:right-2.5 top-2.5 pointer-events-none" />
+            </button>
+
+            {isStateDropdownOpen && (
+              <div className="absolute right-0 mt-1.5 w-64 max-w-[calc(100vw-32px)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2.5 flex flex-col space-y-2 text-left origin-top-right">
+                {/* State Search Bar */}
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
+                  <input
+                    type="text"
+                    placeholder="Search state..."
+                    value={stateSearchQuery}
+                    onChange={(e) => setStateSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleStateSearch();
+                      }
+                    }}
+                    className="bg-transparent border-none text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none px-1.5 py-1 w-full font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleStateSearch}
+                    className="p-1 bg-slate-800 text-white rounded-md hover:bg-slate-900 transition-colors shrink-0 cursor-pointer border-none flex items-center justify-center h-6 w-6"
+                    title="Search"
+                  >
+                    <Search className="h-3 w-3" />
+                  </button>
+                </div>
+
+                {/* Clear Search Indicator if searched */}
+                {activeSearchedState && (
+                  <div className="flex items-center justify-between text-[10px] bg-slate-100 text-slate-700 px-2 py-1 rounded-md font-semibold">
+                    <span>Result: "{activeSearchedState}"</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSearchedState("");
+                        setStateSearchQuery("");
+                      }}
+                      className="text-slate-500 hover:text-slate-800 font-extrabold cursor-pointer border-none bg-transparent"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+
+                {/* States List with Scrollbar */}
+                <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                  {/* Primary Checkbox: All */}
+                  <label className="flex items-center space-x-2 px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors text-left w-full select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedStates.length === ALL_STATES.length}
+                      onChange={handleToggleAllStates}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer accent-indigo-600"
+                    />
+                    <span className="text-xs font-bold text-slate-800">All States</span>
+                  </label>
+
+                  <div className="border-t border-slate-100 my-1" />
+
+                  {/* Individual States */}
+                  {orderedStates.map((state) => (
+                    <label
+                      key={state}
+                      className={`flex items-center space-x-2 px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors text-left w-full select-none ${
+                        activeSearchedState && state.toLowerCase().includes(activeSearchedState.toLowerCase())
+                          ? "bg-amber-50/70 border border-amber-150"
+                          : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedStates.includes(state)}
+                        onChange={() => handleToggleState(state)}
+                        className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer accent-indigo-600"
+                      />
+                      <span className="text-xs font-semibold text-slate-700 flex-1">{state}</span>
+                      {activeSearchedState && state.toLowerCase().includes(activeSearchedState.toLowerCase()) && (
+                        <span className="text-[8px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-90">
+                          Match
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
 
@@ -789,19 +1254,8 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
         </div>
       </div>
 
-      {/* 3. SEARCH HUD FLOATING BAR (Allows typing a city to navigate automatically) */}
-      <div className="absolute top-26 inset-x-3 z-30 flex items-center justify-between pointer-events-none gap-2">
-        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-[280px] flex items-center bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl px-3 py-1.5 shadow-md pointer-events-auto">
-          <Search className="h-4 w-4 text-slate-400 shrink-0 mr-2" />
-          <input 
-            type="text"
-            placeholder="Search Indian Hub (Mumbai, Delhi, Blr)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent border-none text-[11px] text-slate-800 placeholder:text-slate-400 focus:outline-none w-full font-bold"
-          />
-        </form>
-
+      {/* 3. MAP HUD OVERLAYS (Allows toggling map view mode if Google Key Available) */}
+      <div className="absolute top-26 inset-x-3 z-30 flex items-center justify-end pointer-events-none gap-2">
         {/* Real / Vector Toggle (If Google Key Available) */}
         {hasValidKey && (
           <button
@@ -1078,66 +1532,119 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
             <AnimatePresence>
               {selectedCluster && activeIssue && (
                 <motion.div
-                  initial={{ opacity: 0, y: 80 }}
+                  initial={{ opacity: 0, y: 150 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 80 }}
-                  className="absolute bottom-3 inset-x-3 z-40 bg-white rounded-2xl border border-slate-200 shadow-xl p-4 text-left pointer-events-auto flex flex-col space-y-3 max-h-[380px] overflow-y-auto"
+                  exit={{ opacity: 0, y: 150 }}
+                  className="fixed inset-x-0 bottom-0 top-16 md:absolute md:top-4 md:left-4 md:bottom-4 md:right-auto md:w-[460px] md:h-auto z-40 bg-white md:rounded-2xl border border-slate-200 shadow-2xl flex flex-col pointer-events-auto overflow-hidden text-slate-800"
                 >
-                  {/* Drawer Header */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide flex items-center flex-wrap gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  {/* Mobile Grab Handle */}
+                  <div className="flex justify-center py-2 md:hidden shrink-0 bg-slate-50 border-b border-slate-100">
+                    <div className="w-12 h-1 bg-slate-300 rounded-full" />
+                  </div>
+
+                  {/* Drawer Header (Fixed) */}
+                  <div className="flex justify-between items-start p-4 bg-slate-50 border-b border-slate-100 shrink-0 text-left">
+                    <div className="flex-1 text-left">
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center flex-wrap gap-1.5 text-left">
+                        <MapPin className="h-4 w-4 text-rose-500 shrink-0" />
                         <span>{selectedCluster.locality}</span>
                       </h4>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 tracking-wider">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-wider text-left">
                         Civic Hotspot • {(selectedCluster.issues || []).length} {(selectedCluster.issues || []).length === 1 ? "Report" : "Merged Reports"} in area
                       </p>
                     </div>
                     <button 
-                      onClick={() => setSelectedCluster(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition shrink-0 ml-2"
+                      onClick={() => {
+                        setSelectedCluster(null);
+                        setIsResolving(false);
+                      }}
+                      className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-850 rounded-full transition-colors shrink-0 ml-2 cursor-pointer bg-transparent border-none flex items-center justify-center"
                     >
-                      <X className="h-4.5 w-4.5" />
+                      <X className="h-4 w-4" style={{ color: "#334155" }} />
                     </button>
                   </div>
 
-                  {/* Main Content: Split layout with Image and Issue Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch">
-                    {/* Left/Top: Image Preview Section */}
-                    <div className="md:col-span-4 relative h-36 bg-slate-100 rounded-xl overflow-hidden border border-slate-100 flex items-center justify-center shrink-0">
-                      {activeIssue.imageUrl ? (
-                        <img 
-                          src={activeIssue.imageUrl} 
-                          alt={activeIssue.title} 
-                          className="w-full h-full object-cover rounded-xl"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center p-4 text-center space-y-1 text-slate-400 w-full h-full bg-slate-50">
-                          <AlertCircle className="h-7 w-7 text-slate-300" />
-                          <span className="text-[10px] font-bold">No Image Provided</span>
+                  {/* Body - Fully Scrollable */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin text-left">
+                    {/* Horizontal Scrollable Thumbnails for Multiple Issues in Cluster */}
+                    {(selectedCluster.issues || []).length > 1 && (
+                      <div className="bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl space-y-2 text-left">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-left">
+                          Merged Reports in Hotspot ({(selectedCluster.issues || []).length}):
                         </div>
-                      )}
-                      
-                      {/* Floating status pill */}
-                      <span className={`absolute top-2 left-2 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm text-white ${
-                        activeIssue.status === "RESOLVED"
-                          ? "bg-emerald-600"
-                          : activeIssue.status === "IN_PROGRESS"
-                          ? "bg-sky-600"
-                          : "bg-rose-600 animate-pulse"
-                      }`}>
-                        {activeIssue.status}
-                      </span>
-                    </div>
+                        <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-thin">
+                          {(selectedCluster.issues || []).map((iss) => (
+                            <button
+                              key={iss.id}
+                              onClick={() => setActiveIssueId(iss.id)}
+                              className={`flex items-center space-x-2 p-1.5 rounded-lg border text-left cursor-pointer shrink-0 transition-all ${
+                                activeIssueId === iss.id
+                                  ? "bg-white border-indigo-300 ring-2 ring-indigo-500/10 shadow-sm"
+                                  : "bg-transparent border-slate-200/80 hover:bg-slate-100"
+                              }`}
+                            >
+                              <div className="h-8 w-8 rounded-md overflow-hidden shrink-0 bg-slate-200">
+                                {iss.imageUrl ? (
+                                  <img 
+                                    src={iss.imageUrl} 
+                                    alt={iss.title} 
+                                    className="h-full w-full object-cover" 
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div className="h-full w-full bg-slate-100 flex items-center justify-center text-slate-400 text-[8px] font-black">
+                                    N/A
+                                  </div>
+                                )}
+                              </div>
+                              <div className="max-w-[120px] pr-1 text-left">
+                                <div className="text-[9px] font-bold text-slate-800 truncate leading-tight text-left">
+                                  {iss.title}
+                                </div>
+                                <div className="text-[8px] text-slate-400 font-semibold truncate uppercase mt-0.5 text-left">
+                                  Sev {iss.severity} • {iss.category}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Right/Bottom: Active Issue Information */}
-                    <div className="md:col-span-8 flex flex-col justify-between space-y-2">
-                      <div className="space-y-1">
-                        {/* Upper row: Category & Severity */}
+                    {/* Active Issue Card */}
+                    <div className="bg-white border border-slate-150 rounded-xl overflow-hidden shadow-sm text-left">
+                      {/* Image Preview Section */}
+                      <div className="relative h-44 bg-slate-100 border-b border-slate-100 flex items-center justify-center">
+                        {activeIssue.imageUrl ? (
+                          <img 
+                            src={activeIssue.imageUrl} 
+                            alt={activeIssue.title} 
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-4 text-center space-y-1 text-slate-400 w-full h-full bg-slate-50">
+                            <AlertCircle className="h-8 w-8 text-slate-300" />
+                            <span className="text-xs font-bold">No Image Provided</span>
+                          </div>
+                        )}
+                        
+                        {/* Floating status pill */}
+                        <span className={`absolute top-2 left-2 text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-sm text-white ${
+                          activeIssue.status === "RESOLVED"
+                            ? "bg-emerald-600"
+                            : activeIssue.status === "IN_PROGRESS"
+                            ? "bg-sky-600"
+                            : "bg-rose-600 animate-pulse"
+                        }`}>
+                          {activeIssue.status}
+                        </span>
+                      </div>
+
+                      {/* Info Metadata */}
+                      <div className="p-3.5 space-y-3 text-left">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="bg-slate-100 text-slate-700 text-[8px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide">
+                          <span className="bg-slate-100 text-slate-700 text-[8px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide border border-slate-200">
                             {activeIssue.category}
                           </span>
                           <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
@@ -1151,73 +1658,373 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
                           </span>
                         </div>
 
-                        {/* Issue Title */}
-                        <h5 className="text-xs font-bold text-slate-900 leading-snug">
-                          {activeIssue.title}
-                        </h5>
+                        <div className="text-left">
+                          <h5 className="text-sm font-extrabold text-slate-900 leading-snug text-left">
+                            {activeIssue.title}
+                          </h5>
+                          <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1.5 text-left">
+                            {activeIssue.description}
+                          </p>
+                        </div>
 
-                        {/* Issue Description */}
-                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed max-h-12 overflow-y-auto pr-1">
-                          {activeIssue.description}
-                        </p>
+                        {/* Extra tracking meta */}
+                        <div className="bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 space-y-1 text-[10px] text-left">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400 font-bold uppercase tracking-wide">Tracking ID</span>
+                            <span className="font-mono font-bold text-indigo-600">{activeIssue.trackingId}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400 font-bold uppercase tracking-wide">Division</span>
+                            <span className="font-semibold text-slate-700 truncate max-w-[180px]">{activeIssue.department}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400 font-bold uppercase tracking-wide">Ward</span>
+                            <span className="font-semibold text-slate-700">{activeIssue.ward}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+                          <span>
+                            By: <b className="text-slate-600 font-bold">{activeIssue.isAnonymous ? "Anonymous Citizen" : (activeIssue.reporterName || "Concerned Citizen")}</b>
+                          </span>
+                          <span className="font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                            ▲ {activeIssue.upvotes || 0} Upvotes
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions Panel */}
+                    <div className="space-y-2 text-left pt-1 border-t border-slate-100">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                        Issue Actions
                       </div>
 
-                      {/* Reporter & Upvote counts */}
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[9px] text-slate-400">
-                        <span>
-                          By: <b className="text-slate-600 font-semibold">{activeIssue.isAnonymous ? "Anonymous Citizen" : (activeIssue.reporterName || "Concerned Citizen")}</b>
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* Option 1: Upvote / Agree */}
+                        <button
+                          onClick={() => handleLocalVote(activeIssue.id)}
+                          className="flex items-center justify-center space-x-1.5 py-2 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold cursor-pointer transition-colors"
+                        >
+                          <ThumbsUp className="h-3.5 w-3.5" />
+                          <span>Upvote ({activeIssue.upvotes || 0})</span>
+                        </button>
+
+                        {/* Option 2: Fix & Verify */}
+                        <button
+                          onClick={() => {
+                            if (activeIssue.status === "RESOLVED") {
+                              alert("This issue is already resolved!");
+                              return;
+                            }
+                            setIsResolving(!isResolving);
+                          }}
+                          className={`flex items-center justify-center space-x-1.5 py-2 px-3 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                            isResolving
+                              ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+                              : "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700"
+                          }`}
+                        >
+                          <CheckSquare className="h-3.5 w-3.5" />
+                          <span>{isResolving ? "Close Panel" : "Fix & Verify"}</span>
+                        </button>
+                      </div>
+
+                      {/* Option 3: Discussion & Update - Full-width Slate layout */}
+                      <button
+                        onClick={() => {
+                          setTimeout(() => {
+                            const inputEl = document.getElementById("maps-comment-input");
+                            if (inputEl) {
+                              inputEl.scrollIntoView({ behavior: "smooth", block: "center" });
+                              inputEl.focus();
+                            }
+                          }, 100);
+                        }}
+                        className="w-full flex items-center justify-center space-x-1.5 py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>Discuss & Update ({(activeIssue.corroborations || []).length})</span>
+                      </button>
+                    </div>
+
+                    {/* Option 1: Fix & Verify (Resolve Form Overlay/Box) */}
+                    {isResolving && (
+                      <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-3 shadow-inner text-left">
+                        <div className="flex items-start space-x-2 text-left">
+                          <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div className="text-left">
+                            <span className="text-[10px] font-black text-emerald-900 uppercase block tracking-wider text-left">Resolve Issue</span>
+                            <p className="text-[9px] text-emerald-700 font-semibold leading-normal mt-0.5 text-left">
+                              Verify that the issue is resolved by uploading or capturing a photo of the location.
+                            </p>
+                          </div>
+                        </div>
+
+                        {resolutionError && (
+                          <div className="p-2 bg-rose-50 border border-rose-150 text-rose-600 text-[10px] font-semibold rounded">
+                            {resolutionError}
+                          </div>
+                        )}
+
+                        {resolutionSuccessMsg && (
+                          <div className="p-2 bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold rounded">
+                            {resolutionSuccessMsg}
+                          </div>
+                        )}
+
+                        <div className="space-y-1">
+                          {resolutionPhoto ? (
+                            <div className="relative rounded-lg overflow-hidden h-36 border border-slate-200 shadow-sm bg-white">
+                              <img src={resolutionPhoto} className="w-full h-full object-cover" />
+                              <button 
+                                onClick={() => setResolutionPhoto(null)}
+                                className="absolute top-2 right-2 p-1 bg-slate-900/85 hover:bg-slate-900 text-white rounded-full cursor-pointer border-none flex items-center justify-center"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed border-slate-200 rounded-lg p-5 flex flex-col items-center justify-center bg-white shadow-xs text-center">
+                              <Camera className="h-6 w-6 text-indigo-500 mb-2" />
+                              <label className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 cursor-pointer uppercase tracking-wider bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors">
+                                <span>Capture Resolved Image</span>
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  capture="environment"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const r = new FileReader();
+                                      r.onload = () => setResolutionPhoto(r.result as string);
+                                      r.readAsDataURL(file);
+                                    }
+                                  }}
+                                  className="hidden" 
+                                />
+                              </label>
+                              <span className="text-[8px] text-slate-400 font-medium font-mono mt-2">Upload or capture photo showing the resolved site</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {resolutionPhoto && (
+                          <div className="space-y-1 text-left">
+                            <label className="text-[9px] font-black text-slate-400 uppercase block text-left">Describe Action Taken</label>
+                            <textarea
+                              placeholder="Describe what was done to fix it clearly..."
+                              value={resolutionDesc}
+                              onChange={(e) => setResolutionDesc(e.target.value)}
+                              rows={2}
+                              className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center space-x-1 text-[9px] text-slate-400 font-mono text-left">
+                          <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                          <span>Auto-records GPS & timestamp</span>
+                        </div>
+
+                        <div className="flex space-x-1.5 pt-1">
+                          <button
+                            onClick={() => handleLocalResolve(activeIssue.id)}
+                            disabled={resolutionLoading || !resolutionPhoto}
+                            className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 text-white font-extrabold rounded text-[10px] uppercase cursor-pointer border-none shadow-sm"
+                          >
+                            {resolutionLoading ? "Verifying..." : "Verify & Resolve"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsResolving(false);
+                              setResolutionPhoto(null);
+                              setResolutionDesc("");
+                              setResolutionError("");
+                            }}
+                            className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded text-[10px] uppercase cursor-pointer border-none"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Discussion & Updates Board (Threaded, Upvotable comments) */}
+                    <div className="border-t border-slate-100 pt-4 space-y-3.5 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-left">
+                          Citizen Discussion Thread ({(activeIssue.corroborations || []).length})
                         </span>
-                        <span className="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
-                          ▲ {activeIssue.upvotes || 0} Upvotes
-                        </span>
+                      </div>
+
+                      {/* Comment list */}
+                      <div className="space-y-4">
+                        {(() => {
+                          const comments = activeIssue.corroborations || [];
+                          const topLevel = comments.filter(c => !c.parentId);
+
+                          if (topLevel.length === 0) {
+                            return (
+                              <p className="text-[10px] text-slate-400 italic font-medium py-2 bg-slate-50 border border-dashed border-slate-200/80 rounded-lg text-center">
+                                No comments or corroborations yet. Be the first to start the discussion!
+                              </p>
+                            );
+                          }
+
+                          return topLevel.map(comment => {
+                            const replies = comments.filter(r => r.parentId === comment.id);
+                            
+                            return (
+                              <div key={comment.id} className="space-y-2 text-xs text-left bg-slate-50/55 p-3 rounded-xl border border-slate-200/50">
+                                {/* Top-level comment */}
+                                <div className="flex items-start space-x-2.5 text-left">
+                                  {/* Avatar or custom letters */}
+                                  {comment.avatar ? (
+                                    <img src={comment.avatar} className="h-7 w-7 rounded-full object-cover shrink-0" />
+                                  ) : (
+                                    <div className="h-7 w-7 rounded-full bg-slate-200 text-slate-600 font-extrabold flex items-center justify-center uppercase shrink-0 text-[10px]">
+                                      {comment.author.substring(0, 2)}
+                                    </div>
+                                  )}
+
+                                  <div className="flex-1 space-y-0.5 text-left">
+                                    <div className="flex items-baseline justify-between">
+                                      <span className="font-extrabold text-slate-800 text-[11px]">{comment.author}</span>
+                                      <span className="text-[9px] text-slate-400 font-mono font-medium">
+                                        {new Date(comment.timestamp).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                    <p className="text-slate-600 text-xs leading-normal font-medium text-left">
+                                      {comment.text}
+                                    </p>
+
+                                    {/* Action row (Upvote & Reply) */}
+                                    <div className="flex items-center space-x-4 pt-1.5 text-[10px] text-left">
+                                      <button
+                                        onClick={() => handleLocalVoteComment(activeIssue.id, comment.id)}
+                                        className="text-slate-400 hover:text-blue-600 flex items-center space-x-1 cursor-pointer bg-transparent border-none font-bold"
+                                      >
+                                        <ThumbsUp className="h-3 w-3" />
+                                        <span>{comment.upvotes || 0} Upvotes</span>
+                                      </button>
+                                      
+                                      <button
+                                        onClick={() => {
+                                          if (replyingToCommentId === comment.id) {
+                                            setReplyingToCommentId(null);
+                                          } else {
+                                            setReplyingToCommentId(comment.id);
+                                            setReplyText("");
+                                          }
+                                        }}
+                                        className="text-slate-400 hover:text-indigo-600 flex items-center space-x-1 cursor-pointer bg-transparent border-none font-bold"
+                                      >
+                                        <MessageSquare className="h-3 w-3" />
+                                        <span>Reply</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Inline reply input box */}
+                                {replyingToCommentId === comment.id && (
+                                  <div className="pl-9 pt-2 flex items-center space-x-1.5 text-left">
+                                    <input 
+                                      type="text"
+                                      placeholder={`Reply to ${comment.author}...`}
+                                      value={replyText}
+                                      onChange={(e) => setReplyText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          handleLocalAddComment(activeIssue.id, comment.id, replyText);
+                                        }
+                                      }}
+                                      className="flex-1 bg-white border border-slate-200 text-xs text-slate-700 px-3 py-1.5 rounded-lg focus:outline-none focus:border-indigo-400 font-medium"
+                                    />
+                                    <button
+                                      onClick={() => handleLocalAddComment(activeIssue.id, comment.id, replyText)}
+                                      disabled={submittingComment || !replyText.trim()}
+                                      className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-lg cursor-pointer border-none flex items-center justify-center"
+                                    >
+                                      <Send className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => setReplyingToCommentId(null)}
+                                      className="px-2 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg text-[9px] font-bold uppercase cursor-pointer border-none"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Threaded Nested Replies */}
+                                {replies.length > 0 && (
+                                  <div className="pl-7 ml-3.5 border-l-2 border-slate-150 space-y-2.5 pt-1.5 text-left">
+                                    {replies.map(reply => (
+                                      <div key={reply.id} className="flex items-start space-x-2 text-xs text-left">
+                                        {reply.avatar ? (
+                                          <img src={reply.avatar} className="h-5.5 w-5.5 rounded-full object-cover shrink-0" />
+                                        ) : (
+                                          <div className="h-5.5 w-5.5 rounded-full bg-slate-200 text-slate-600 font-extrabold flex items-center justify-center uppercase shrink-0 text-[8px]">
+                                            {reply.author.substring(0, 2)}
+                                          </div>
+                                        )}
+
+                                        <div className="flex-1 space-y-0.5 text-left">
+                                          <div className="flex items-baseline justify-between">
+                                            <span className="font-extrabold text-slate-800 text-[10.5px]">{reply.author}</span>
+                                            <span className="text-[8px] text-slate-400 font-mono font-medium">
+                                              {new Date(reply.timestamp).toLocaleDateString()}
+                                            </span>
+                                          </div>
+                                          <p className="text-slate-600 text-xs leading-normal font-medium text-left">
+                                            {reply.text}
+                                          </p>
+
+                                          <div className="flex items-center space-x-3 pt-1 text-[9px] text-left">
+                                            <button
+                                              onClick={() => handleLocalVoteComment(activeIssue.id, reply.id)}
+                                              className="text-slate-400 hover:text-blue-600 flex items-center space-x-1 cursor-pointer bg-transparent border-none font-bold"
+                                            >
+                                              <ThumbsUp className="h-2.5 w-2.5" />
+                                              <span>{reply.upvotes || 0} Upvotes</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+
+                      {/* Main Bottom Comment Input field (Focus anchor) */}
+                      <div className="pt-2 text-left">
+                        <div className="flex items-start space-x-2.5 text-left">
+                          <textarea
+                            id="maps-comment-input"
+                            rows={2}
+                            placeholder="Add your public complaint comment or updates here..."
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            className="flex-1 bg-white border border-slate-250 text-xs text-slate-700 p-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium placeholder:text-slate-400"
+                          />
+                          <button
+                            onClick={() => handleLocalAddComment(activeIssue.id)}
+                            disabled={submittingComment || !commentText.trim()}
+                            className="h-9 w-9 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl cursor-pointer border-none flex items-center justify-center shadow-md shrink-0 transition-all active:scale-95"
+                            title="Post comment"
+                          >
+                            <Send className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Horizontal Scrollable Thumbnails for Multiple Issues in Cluster */}
-                  {(selectedCluster.issues || []).length > 1 && (
-                    <div className="border-t border-slate-100 pt-2 space-y-1.5">
-                      <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">
-                        Merged Reports in this Bubble ({(selectedCluster.issues || []).length}):
-                      </div>
-                      <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-thin">
-                        {(selectedCluster.issues || []).map((iss) => (
-                          <button
-                            key={iss.id}
-                            onClick={() => setActiveIssueId(iss.id)}
-                            className={`flex items-center space-x-2 p-1.5 rounded-xl border text-left cursor-pointer shrink-0 transition-all ${
-                              activeIssueId === iss.id
-                                ? "bg-indigo-50/50 border-indigo-200 ring-2 ring-indigo-500/10"
-                                : "bg-slate-50/50 border-slate-200 hover:bg-slate-100/70"
-                            }`}
-                          >
-                            <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0 bg-slate-200">
-                              {iss.imageUrl ? (
-                                <img 
-                                  src={iss.imageUrl} 
-                                  alt={iss.title} 
-                                  className="h-full w-full object-cover" 
-                                  referrerPolicy="no-referrer"
-                                />
-                              ) : (
-                                <div className="h-full w-full bg-slate-100 flex items-center justify-center text-slate-400 text-[8px] font-black">
-                                  N/A
-                                </div>
-                              )}
-                            </div>
-                            <div className="max-w-[120px] pr-1">
-                              <div className="text-[9px] font-bold text-slate-800 truncate leading-tight">
-                                {iss.title}
-                              </div>
-                              <div className="text-[8px] text-slate-400 font-semibold truncate uppercase mt-0.5">
-                                Sev {iss.severity} • {iss.category}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1311,7 +2118,10 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
                   return (
                     <div 
                       key={item.id}
-                      className="border border-slate-100 rounded-xl p-3 shadow-sm hover:border-slate-200 transition-all flex flex-col space-y-2 bg-white"
+                      onClick={() => {
+                        if (onSelectIssue) onSelectIssue(item);
+                      }}
+                      className="border border-slate-150 rounded-xl p-3.5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex flex-col space-y-2 bg-white cursor-pointer"
                     >
                       <div className="flex justify-between items-start gap-2">
                         <span className="text-xs font-extrabold text-slate-800 leading-snug">{item.title}</span>
@@ -1397,9 +2207,9 @@ export default function MapsView({ issues = [], isMobile = false }: MapsViewProp
             >
               <button 
                 onClick={() => setIsQRModalOpen(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4.5 w-4.5" />
               </button>
 
               <div className="space-y-1 text-left">

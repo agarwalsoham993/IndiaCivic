@@ -32,9 +32,22 @@ interface HomeViewProps {
   onNavigateToTab: (tab: string) => void;
   onVote: (issueId: string, voteType: 'UPVOTE' | 'AGREE') => void;
   onSignUpClick?: () => void;
+  currentLocationName?: string;
+  currentWardName?: string;
+  isLocationLoading?: boolean;
 }
 
-export default function HomeView({ user, issues, onSelectIssue, onNavigateToTab, onVote, onSignUpClick }: HomeViewProps) {
+export default function HomeView({ 
+  user, 
+  issues, 
+  onSelectIssue, 
+  onNavigateToTab, 
+  onVote, 
+  onSignUpClick,
+  currentLocationName,
+  currentWardName,
+  isLocationLoading
+}: HomeViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
@@ -70,29 +83,41 @@ export default function HomeView({ user, issues, onSelectIssue, onNavigateToTab,
   return (
     <div className="space-y-6 pb-24 text-left max-w-7xl mx-auto">
       {/* Location and Header (Mobile only) */}
-      <div className="flex items-center justify-between lg:hidden">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-100">
-            <MapPin className="h-5 w-5 text-indigo-600 animate-pulse" />
+      <div className="flex items-center justify-between gap-1 sm:gap-2.5 lg:hidden w-full px-1">
+        <div className="flex items-center space-x-2 min-w-0 flex-1">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-50 border border-indigo-100 shrink-0">
+            <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600 animate-pulse" />
           </div>
-          <div>
-            <div className="text-xs text-slate-400 font-semibold tracking-wider uppercase">CURRENT LOCATION</div>
-            <div className="text-base font-bold text-slate-800 flex items-center">
-              Indiranagar, Bengaluru
-              <span className="ml-1.5 px-2 py-0.5 text-[10px] bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100 font-sans">Ward 88</span>
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase leading-none mb-0.5">CURRENT LOCATION</div>
+            <div className="text-xs sm:text-sm font-extrabold text-slate-800 leading-tight truncate">
+              {isLocationLoading ? (
+                <span className="text-slate-400 italic font-medium">Detecting...</span>
+              ) : (
+                currentLocationName || "Indiranagar, Bengaluru"
+              )}
             </div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <span className="px-2 py-1 text-[9px] sm:text-[10px] bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100 font-sans font-bold whitespace-nowrap">
+            {currentWardName || "Ward 88"}
+          </span>
+          
           {/* Notifications */}
-          <button className="relative p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer bg-transparent">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
+          <button className="relative p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer bg-transparent shrink-0">
+            <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-rose-500 ring-1 ring-white" />
           </button>
-          {/* Points Bubble */}
-          <div className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm font-bold">
-            <Award className="h-4 w-4 text-indigo-600" />
-            <span>{user.civicScore} XP</span>
+          
+          {/* Points Bubble styled exactly like Screenshot 2 with large score and smaller XP label */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 shrink-0 select-none">
+            <Award className="h-4 w-4 text-indigo-600 shrink-0" />
+            <div className="flex flex-col text-left leading-none">
+              <span className="text-xs font-black">{user.civicScore}</span>
+              <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-wider">XP</span>
+            </div>
           </div>
         </div>
       </div>
