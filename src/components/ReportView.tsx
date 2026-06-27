@@ -38,11 +38,12 @@ import { Issue } from "../types";
 
 interface ReportViewProps {
   onAddIssue: (issue: Partial<Issue>) => void;
+  isMobile?: boolean;
 }
 
 type ComplaintMode = "camera" | "upload" | "social";
 
-export default function ReportView({ onAddIssue }: ReportViewProps) {
+export default function ReportView({ onAddIssue, isMobile = false }: ReportViewProps) {
   // Coordinates default to Indiranagar
   const [coords, setCoords] = useState({ lat: 12.9719, lng: 77.6412 });
   const [gpsLock, setGpsLock] = useState(true);
@@ -123,6 +124,7 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
   // Complaint Mode State
   const [activeMode, setActiveMode] = useState<ComplaintMode>("camera");
   const [showSubmitPage, setShowSubmitPage] = useState(false);
+  const [isFullScreenCameraOpen, setIsFullScreenCameraOpen] = useState(false);
 
   // Camera & File Upload states
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -150,7 +152,7 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
     fileSize?: string;
     details?: string;
   } | null>(null);
-  const [simulateMissingMetadata, setSimulateMissingMetadata] = useState(false);
+  const simulateMissingMetadata = false;
 
   // Mode 3: Social link states
   const [socialLink, setSocialLink] = useState("");
@@ -189,10 +191,19 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingMode },
-        audio: true
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: true
+        });
+      } catch (audioErr) {
+        console.warn("Could not start camera with audio, falling back to video-only stream:", audioErr);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: false
+        });
+      }
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -210,8 +221,31 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
       }
     } catch (err) {
       console.error("Error starting camera:", err);
-      setCameraError("Could not access camera stream. Make sure permissions are granted or switch to 'Upload File' mode!");
+      setCameraError("Could not access camera stream. Make sure permissions are granted, or use the Native Device Camera option below!");
     }
+  };
+
+  // Process files natively captured by the device camera (or selected from gallery)
+  const handleNativeCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fileReader = new FileReader();
+    fileReader.onload = () => {
+      const dataUrl = fileReader.result as string;
+      if (file.type.startsWith("video/")) {
+        setCapturedVideo(dataUrl);
+        setCapturedPhoto(null);
+        setIssueTitle(`Video testimony captured via Device Camera`);
+      } else {
+        setCapturedPhoto(dataUrl);
+        setCapturedVideo(null);
+        setIssueTitle(`Civic issue captured via Device Camera`);
+      }
+      setShowSubmitPage(true);
+      stopCamera();
+    };
+    fileReader.readAsDataURL(file);
   };
 
   const stopCamera = () => {
@@ -221,15 +255,22 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
     }
   };
 
-  // Keep camera running only when camera mode is active and we are not showing the submission screen
+  // Keep camera running only when full screen camera modal is open
   useEffect(() => {
-    if (activeMode === "camera" && !showSubmitPage && !capturedPhoto && !capturedVideo) {
+    if (isFullScreenCameraOpen && !capturedPhoto && !capturedVideo) {
       startCamera();
     } else {
       stopCamera();
     }
     return () => stopCamera();
-  }, [activeMode, showSubmitPage, capturedPhoto, capturedVideo, facingMode]);
+  }, [isFullScreenCameraOpen, facingMode]);
+
+  // Bind stream to video element when it mounts or stream is received
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, isFullScreenCameraOpen, capturedPhoto, capturedVideo]);
 
   // Handle zoom changes in track and style
   useEffect(() => {
@@ -406,6 +447,12 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
     setUploadedFile(null);
     setMetadataResult(null);
     setShowSubmitPage(false);
+  };
+
+  const handleRetake = () => {
+    setCapturedPhoto(null);
+    setCapturedVideo(null);
+    startCamera();
   };
 
   const handleAIScan = async () => {
@@ -586,147 +633,33 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
             {/* 1. CAMERA MODE */}
             {activeMode === "camera" && (
               <div className="space-y-4">
-                {/* Simulated hardware camera element */}
-                <div className="relative h-[320px] rounded-2xl overflow-hidden bg-slate-950 border border-slate-350 shadow-lg flex flex-col justify-end">
-                  {cameraStream ? (
-                    <div className="absolute inset-0 w-full h-full overflow-hidden flex items-center justify-center">
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover transition-transform duration-250"
-                        style={{
-                          transform: `scale(${zoomLevel})`,
-                          transformOrigin: "center"
-                        }}
-                      />
+                <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-6 shadow-sm flex flex-col items-center justify-center min-h-[340px]">
+                  <div className="space-y-2">
+                    <div className="mx-auto h-16 w-16 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mb-2 relative">
+                      <Camera className="h-7 w-7" />
+                      <span className="absolute inset-0 rounded-full border-2 border-indigo-500/20 animate-ping" />
                     </div>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-4">
-                      <div className="p-4 bg-slate-900 border border-slate-800 rounded-full text-indigo-400">
-                        <Camera className="h-10 w-10 animate-pulse" />
-                      </div>
-                      <div>
-                        <p className="text-white text-xs font-bold uppercase tracking-wide">Live Camera Viewfinder</p>
-                        <p className="text-slate-400 text-[10px] max-w-xs mt-1">
-                          {cameraError || "Permit camera access to capture verified real-time civic issues."}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={startCamera}
-                        className="flex items-center justify-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-2.5 px-5 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span>Start Camera Feed</span>
-                      </button>
-                    </div>
-                  )}
+                    <h3 className="text-base font-black text-slate-800 uppercase tracking-wider">CAPTURE CIVIC EVIDENCE</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                      Snap a photo or record video testimony of waste, waterlogging, or other local issues. Media is cryptographically geotagged for authenticity.
+                    </p>
+                  </div>
 
-                  {/* Camera overlay HUD elements */}
-                  {cameraStream && (
-                    <>
-                      {/* GPS Overlay */}
-                      <div className="absolute top-4 left-4 flex items-center space-x-1 bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[9px] font-mono text-white shadow-sm z-10 border border-white/10">
-                        <MapPin className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
-                        <span>GPS: {coords.lat}° N, {coords.lng}° E</span>
-                      </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFullScreenCameraOpen(true);
+                    }}
+                    className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-3.5 px-8 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider border-none"
+                  >
+                    <Camera className="h-4.5 w-4.5" />
+                    <span>Open Camera</span>
+                  </button>
 
-                      {/* Flash state or recording indicator */}
-                      {isRecording ? (
-                        <div className="absolute top-4 right-4 flex items-center space-x-1.5 bg-rose-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold shadow-sm z-10 animate-pulse">
-                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                          <span>RECORDING VIDEO</span>
-                        </div>
-                      ) : flashOn ? (
-                        <div className="absolute top-4 right-4 flex items-center space-x-1 bg-amber-500 text-slate-950 px-2 py-0.5 rounded text-[9px] font-bold z-10">
-                          <Zap className="h-3 w-3 fill-slate-950" />
-                          <span>FLASH ON</span>
-                        </div>
-                      ) : null}
-
-                      {/* BOTTOM VIEWPORT HUD BUTTON BAR */}
-                      <div className="absolute bottom-16 inset-x-4 flex justify-between items-center z-10 px-2">
-                        {/* Zoom Option slider */}
-                        <div className="flex items-center space-x-2 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-white w-full max-w-[140px]">
-                          <span className="text-[10px] font-extrabold font-mono text-slate-300">1x</span>
-                          <input
-                            type="range"
-                            min="1"
-                            max="4"
-                            step="0.5"
-                            value={zoomLevel}
-                            onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
-                            className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                          />
-                          <span className="text-[10px] font-extrabold font-mono text-indigo-400">{zoomLevel}x</span>
-                        </div>
-
-                        {/* Rotate & Flash utilities */}
-                        <div className="flex items-center space-x-2">
-                          <button
-                            type="button"
-                            onClick={toggleFlashlight}
-                            className={`p-2.5 rounded-xl border flex items-center justify-center transition-all ${
-                              flashOn 
-                                ? "bg-amber-500 text-slate-950 border-amber-400" 
-                                : "bg-black/50 text-white border-white/10 hover:bg-black/75"
-                            }`}
-                            title="Flashlight"
-                          >
-                            <Zap className="h-4 w-4" />
-                          </button>
-                          
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFacingMode(prev => prev === "environment" ? "user" : "environment");
-                            }}
-                            className="p-2.5 rounded-xl bg-black/50 border border-white/10 text-white flex items-center justify-center transition-all hover:bg-black/75"
-                            title="Rotate Camera"
-                          >
-                            <RotateCw className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* MAIN CAPTURE CONTROLLER PANEL */}
-                      <div className="bg-black/80 backdrop-blur-md p-3 border-t border-white/10 z-10 flex items-center justify-around w-full">
-                        <button
-                          type="button"
-                          onClick={capturePhoto}
-                          disabled={isRecording}
-                          className="flex-1 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-950 py-3 px-2 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all active:scale-95 shadow-md mx-1"
-                        >
-                          <Camera className="h-4.5 w-4.5 text-indigo-600" />
-                          <span>Click Photo</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={isRecording ? stopRecording : startRecording}
-                          className={`flex-1 py-3 px-2 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all active:scale-95 shadow-md mx-1 text-white ${
-                            isRecording 
-                              ? "bg-rose-600 hover:bg-rose-700 animate-pulse" 
-                              : "bg-slate-800 hover:bg-slate-700 border border-slate-600"
-                          }`}
-                        >
-                          {isRecording ? (
-                            <>
-                              <Square className="h-4 w-4 fill-white" />
-                              <span>Stop Video</span>
-                            </>
-                          ) : (
-                            <>
-                              <Video className="h-4 w-4 text-rose-500" />
-                              <span>Take Video</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </>
-                  )}
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-full text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Certified Safe Geotag Verification Enabled</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -734,23 +667,6 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
             {/* 2. UPLOAD FILE MODE */}
             {activeMode === "upload" && (
               <div className="space-y-5">
-                {/* Simulator Mode controller helper */}
-                <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
-                  <div className="text-left">
-                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">EXIF Verification Simulator</span>
-                    <p className="text-[10px] text-slate-500 leading-none">Choose whether simulated file lacks GPS data</p>
-                  </div>
-                  <label className="flex items-center space-x-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={simulateMissingMetadata}
-                      onChange={(e) => setSimulateMissingMetadata(e.target.checked)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                    />
-                    <span className="text-[10px] font-bold text-rose-700 uppercase">Simulate Lacking GPS</span>
-                  </label>
-                </div>
-
                 {/* Upload drag drop zone */}
                 <label className="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-8 bg-white flex flex-col items-center justify-center text-center cursor-pointer transition-all space-y-3 block">
                   <div className="p-4 bg-slate-50 rounded-full text-indigo-600">
@@ -818,35 +734,8 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
                       ) : (
                         <>
                           <p className="text-[10px] text-rose-600 font-extrabold leading-normal mt-1.5">
-                            {metadataResult.details}
+                            We do not accept files that lack valid GPS location metadata in order to prevent fraud. Please capture the issue using your phone camera or upload a photo that contains valid geotags.
                           </p>
-                          <div className="pt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Fallback option: inject gps geotag
-                                setSimulateMissingMetadata(false);
-                                setCheckingMetadata(true);
-                                setTimeout(() => {
-                                  setCheckingMetadata(false);
-                                  const timestamp = new Date().toLocaleString();
-                                  setCoords({ lat: 12.9719, lng: 77.6412 });
-                                  setMetadataResult({
-                                    valid: true,
-                                    lat: 12.9719,
-                                    lng: 77.6412,
-                                    timestamp: timestamp,
-                                    fileName: uploadedFile?.name || "injected_hazard.jpg",
-                                    fileSize: uploadedFile ? (uploadedFile.size / (1024 * 1024)).toFixed(2) + " MB" : "1.5 MB",
-                                    details: "Fallback: Standard browser coordinates matched. Geotags simulated successfully!"
-                                  });
-                                }, 800);
-                              }}
-                              className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold uppercase text-[9px] px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all"
-                            >
-                              Overrule & Inject Verified GPS Location
-                            </button>
-                          </div>
                         </>
                       )}
                     </div>
@@ -1216,6 +1105,208 @@ export default function ReportView({ onAddIssue }: ReportViewProps) {
                 <span>Submit Verified Civic Report</span>
               </button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Immersive Full-Screen Civic Camera Modal Overlay */}
+      <AnimatePresence>
+        {isFullScreenCameraOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-black flex flex-col justify-between select-none"
+          >
+            {/* Header overlay HUD */}
+            <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-black/90 to-transparent px-4 py-3 flex items-center justify-between z-20">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFullScreenCameraOpen(false);
+                  setCapturedPhoto(null);
+                  setCapturedVideo(null);
+                }}
+                className="flex items-center space-x-1 bg-white/10 hover:bg-white/20 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border-none cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Close</span>
+              </button>
+              
+              <div className="flex items-center space-x-1.5 bg-rose-600/90 text-white px-2.5 py-1.5 rounded-xl text-[9px] font-mono font-bold tracking-wider uppercase border border-rose-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                <span>GPS: {coords.lat.toFixed(5)}°N, {coords.lng.toFixed(5)}°E</span>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={toggleFlashlight}
+                  className={`p-2.5 rounded-xl flex items-center justify-center transition-all border-none cursor-pointer ${
+                    flashOn ? "bg-amber-500 text-slate-950" : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+                  title="Toggle Flash"
+                >
+                  <Zap className="h-4 w-4" />
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setFacingMode(p => p === "environment" ? "user" : "environment")}
+                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all border-none cursor-pointer"
+                  title="Rotate Camera"
+                >
+                  <RotateCw className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Viewfinder block */}
+            <div className="absolute inset-0 w-full h-full overflow-hidden flex items-center justify-center bg-black">
+              {cameraStream ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover transition-transform duration-250"
+                  style={{
+                    transform: `scale(${zoomLevel})`,
+                    transformOrigin: "center"
+                  }}
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-5 bg-slate-950 text-white z-10">
+                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-full text-indigo-400">
+                    <Camera className="h-10 w-10 animate-pulse" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-extrabold uppercase tracking-wider">Camera Feed Loading</h4>
+                    <p className="text-slate-400 text-[10px] max-w-xs mx-auto leading-relaxed">
+                      Please allow camera stream access. If blocked, tap below to capture natively using your phone.
+                    </p>
+                  </div>
+                  <label className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-3 px-6 rounded-xl shadow-lg cursor-pointer transition-colors uppercase tracking-wider border-none text-center">
+                    <Camera className="h-4 w-4" />
+                    <span>Use Device Camera</span>
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      capture="environment"
+                      onChange={(e) => {
+                        handleNativeCapture(e);
+                        setIsFullScreenCameraOpen(false);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Active Recording HUD Indicator */}
+            {isRecording && (
+              <div className="absolute top-24 left-1/2 -translate-x-1/2 flex items-center space-x-2 bg-rose-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold tracking-widest uppercase animate-pulse z-10">
+                <span className="h-2 w-2 rounded-full bg-white" />
+                <span>REC VIDEO</span>
+              </div>
+            )}
+
+            {/* Bottom HUD area: zoom & shutter */}
+            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black via-black/80 to-transparent p-6 flex flex-col space-y-4 z-20">
+              {/* Zoom Level Option Slider */}
+              <div className="flex items-center justify-center space-x-2 text-white">
+                <span className="text-[10px] font-mono text-slate-400">1x</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="4"
+                  step="0.5"
+                  value={zoomLevel}
+                  onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                  className="w-32 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+                <span className="text-[10px] font-bold font-mono text-indigo-400">{zoomLevel}x Zoom</span>
+              </div>
+
+              {/* Shutter Button Bar */}
+              <div className="flex items-center justify-around max-w-sm mx-auto w-full">
+                {/* Click Photo Button */}
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  disabled={isRecording}
+                  className="flex-1 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-950 h-14 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 shadow-lg mx-2 border-none"
+                >
+                  <Camera className="h-5 w-5 text-indigo-600" />
+                  <span>Snapshot</span>
+                </button>
+
+                {/* Take Video Button */}
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 shadow-lg mx-2 text-white border-none ${
+                    isRecording 
+                      ? "bg-rose-600 hover:bg-rose-700 animate-pulse" 
+                      : "bg-slate-900 hover:bg-slate-800 border border-slate-700"
+                  }`}
+                >
+                  {isRecording ? (
+                    <>
+                      <Square className="h-4 w-4 fill-white animate-pulse" />
+                      <span>Stop (REC)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Video className="h-4.5 w-4.5 text-rose-500" />
+                      <span>Record</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Captured Media Preview Overlay inside the modal */}
+            {(capturedPhoto || capturedVideo) && (
+              <div className="absolute inset-0 w-full h-full bg-slate-950 flex flex-col justify-center items-center p-4 z-30">
+                {capturedPhoto && (
+                  <img src={capturedPhoto} alt="Captured Testimony" className="max-h-[70vh] max-w-full rounded-2xl object-contain border border-slate-800 shadow-2xl" />
+                )}
+                {capturedVideo && (
+                  <video src={capturedVideo} controls autoPlay loop className="max-h-[70vh] max-w-full rounded-2xl object-contain border border-slate-800 shadow-2xl" />
+                )}
+
+                <div className="mt-6 space-y-4 w-full max-w-sm text-center">
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 font-extrabold px-3 py-1 rounded-full uppercase tracking-widest font-mono">
+                      <CheckCircle className="h-3 w-3" /> GPS Watermarked
+                    </span>
+                    <p className="text-white text-xs font-semibold">Verify this testimony to generate your report.</p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleRetake}
+                      className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all border border-white/10 cursor-pointer text-center"
+                    >
+                      Retake
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSubmitPage(true);
+                        setIsFullScreenCameraOpen(false);
+                      }}
+                      className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer text-center border-none"
+                    >
+                      Use Media
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

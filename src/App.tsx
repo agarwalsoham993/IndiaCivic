@@ -640,11 +640,289 @@ export default function App() {
     return "text-indigo-700 bg-indigo-50 border-indigo-200";
   };
 
+  const renderSharedOverlays = () => {
+    return (
+      <>
+        {/* Sign In & Sign Up Dedicated Page Overlay */}
+        <AnimatePresence>
+          {showAuthModal && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-50 z-[100] flex flex-col justify-between p-6 select-none"
+            >
+              {/* Header Brand */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1.5">
+                  <ShieldCheck className="h-5 w-5 text-indigo-600 animate-pulse" />
+                  <span className="text-sm font-black tracking-widest text-slate-800 uppercase">IndiaCivic</span>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowAuthModal(false);
+                    setAuthError("");
+                  }}
+                  className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider cursor-pointer border border-slate-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Back</span>
+                </button>
+              </div>
+
+              {/* Main Container */}
+              <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full space-y-6">
+                <div className="text-center space-y-1.5">
+                  <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
+                    {authMode === 'signin' ? (
+                      <Lock className="h-5 w-5 text-indigo-600" />
+                    ) : signUpRole === 'CITIZEN' ? (
+                      <UserPlus className="h-5 w-5 text-indigo-600" />
+                    ) : (
+                      <Building className="h-5 w-5 text-indigo-600" />
+                    )}
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-wider">
+                    {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {authMode === 'signin' 
+                      ? 'Access your civic workspace to resume local actions' 
+                      : signUpRole === 'CITIZEN' 
+                        ? 'Join IndiaCivic as a resident and start earning rewards'
+                        : 'Register your Organization, NGO, or RWA to host campaigns'}
+                  </p>
+                </div>
+
+                {authError && (
+                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-semibold leading-relaxed shadow-sm">
+                    {authError}
+                  </div>
+                )}
+
+                <form onSubmit={authMode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
+                  {authMode === 'signup' && (
+                    <div className="space-y-4">
+                      {/* Account Type Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Choose Account Type</label>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setSignUpRole('CITIZEN')}
+                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                              signUpRole === 'CITIZEN' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <User className="h-3.5 w-3.5" />
+                            <span>Citizen</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSignUpRole('ORGANIZATION')}
+                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                              signUpRole === 'ORGANIZATION' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <Building className="h-3.5 w-3.5" />
+                            <span>Organization</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Email address */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Email Address</label>
+                    <div className="relative">
+                      <input 
+                        type="email"
+                        placeholder="e.g. neighbor@civic.in"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        required
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                      />
+                      <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Password</label>
+                    <div className="relative">
+                      <input 
+                        type="password"
+                        placeholder="Min. 6 characters"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                      />
+                      <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-bold text-xs uppercase rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-md active:scale-95"
+                  >
+                    <span>{authLoading ? 'Syncing Profile...' : (authMode === 'signin' ? 'Sign In' : 'Create Account')}</span>
+                  </button>
+
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold uppercase tracking-wider">or continue with</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <button 
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={authLoading}
+                    className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 disabled:opacity-50 font-bold text-xs rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24">
+                      <path fill="#EA4335" d="M12 5.04c1.65 0 3.13.57 4.3 1.69l3.21-3.21C17.55 1.77 14.99 1 12 1 7.35 1 3.37 3.67 1.39 7.56l3.85 2.99c.91-2.73 3.47-4.51 6.76-4.51z" />
+                      <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.28 1.48-1.12 2.74-2.38 3.58l3.7 2.87c2.16-2 3.71-4.94 3.71-8.6z" />
+                      <path fill="#FBBC05" d="M5.24 14.55c-.24-.72-.38-1.5-.38-2.3 0-.8.14-1.58.38-2.3L1.39 7.56C.5 9.35 0 11.37 0 12.5s.5 3.15 1.39 4.94l3.85-2.89z" />
+                      <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.11.75-2.52 1.19-4.26 1.19-3.29 0-5.85-1.78-6.76-4.51L1.39 16.9C3.37 20.33 7.35 23 12 23z" />
+                    </svg>
+                    <span>Google Account</span>
+                  </button>
+                </form>
+
+                <div className="text-center">
+                  <button 
+                    onClick={() => {
+                      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
+                      setAuthError("");
+                    }}
+                    className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer bg-transparent border-none uppercase tracking-wide transition-colors"
+                  >
+                    {authMode === 'signin' ? "Don't have an account? Sign Up" : "Already registered? Sign In"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Secure footer */}
+              <div className="text-center text-[10px] text-slate-400 font-medium">
+                🔒 Secured by Firebase Authentication • IndiaCivic
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Upvote Optional Proof Modal Overlay */}
+        <AnimatePresence>
+          {showUpvoteProofModal && upvoteIssueId && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 select-none"
+            >
+              <motion.div 
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl border border-slate-100 text-left"
+              >
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
+                    <ThumbsUp className="h-4 w-4 text-indigo-600" />
+                    <span>I have also seen this!</span>
+                  </h3>
+                  <button 
+                    onClick={() => setShowUpvoteProofModal(false)}
+                    className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                  Would you like to attach an optional photo or comment to help corroborate and verify this post? Contributing media boosts the post's visibility and earns you bonus reputation points.
+                </p>
+
+                {/* Optional Media Preview */}
+                <div className="space-y-3">
+                  {upvoteMedia ? (
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 h-24 bg-slate-100">
+                      <img src={upvoteMedia} className="w-full h-full object-cover animate-none" />
+                      <button 
+                        onClick={() => setUpvoteMedia(null)}
+                        className="absolute top-1.5 right-1.5 p-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full cursor-pointer border-none"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-dashed border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-50">
+                      <Camera className="h-4 w-4 text-slate-400 mb-0.5" />
+                      <label className="text-[9px] font-black text-indigo-600 hover:text-indigo-700 cursor-pointer uppercase tracking-wider">
+                        <span>Attach optional media</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const r = new FileReader();
+                              r.onload = () => setUpvoteMedia(r.result as string);
+                              r.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden" 
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Optional Text comment */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block font-mono">Optional corroboration notes</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g. Yes, still flooded as of 1 hour ago..."
+                      value={upvoteText}
+                      onChange={(e) => setUpvoteText(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col space-y-2 pt-1.5">
+                  <button
+                    onClick={() => handleVote(upvoteIssueId, "UPVOTE", upvoteMedia || "skip_media", upvoteText || "Also seen")}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-1.5 shadow-md border-none"
+                  >
+                    <span>Submit Upvote with Proof</span>
+                  </button>
+                  <button
+                    onClick={() => handleVote(upvoteIssueId, "UPVOTE", "skip_media", "Just upvoted")}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center border-none"
+                  >
+                    <span>Just upvote (Skip proof)</span>
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  };
+
   if (!isMobile) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased flex relative">
         {/* Left Desktop Sidebar - Collapsed & Pastel Green */}
-        <div className="w-16 sm:w-20 bg-[#e6f4ea] text-emerald-950 flex flex-col border-r border-[#cbe2d3] fixed h-full top-0 left-0 z-30 select-none">
+        <div className="w-16 sm:w-20 bg-[#e6f4ea] text-emerald-950 flex flex-col border-r border-[#cbe2d3] fixed h-full top-0 left-0 z-[60] select-none">
           {/* Brand Header */}
           <div className="h-16 flex items-center justify-center border-b border-[#cbe2d3] bg-[#d5ecd9]/80">
             <div className="group relative flex items-center justify-center">
@@ -752,7 +1030,7 @@ export default function App() {
         </div>
 
         {/* Desktop Content Frame */}
-        <div className="flex-1 flex flex-col min-h-screen pl-16 sm:pl-20 w-full bg-slate-50">
+        <div className="flex-1 flex flex-col min-h-screen pl-16 sm:pl-20 max-w-full overflow-hidden bg-slate-50">
           {/* Desktop Header - Hidden for MapsView to allow 100% full screen expansion */}
           {activeTab !== "maps" && (
             <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs">
@@ -1242,6 +1520,7 @@ export default function App() {
                     )}
                     {activeTab === "report" && (
                       <ReportView 
+                        isMobile={false}
                         onAddIssue={() => {
                           loadAllData();
                           setActiveTab(isGuest ? "maps" : "home");
@@ -1272,6 +1551,7 @@ export default function App() {
             </div>
           </main>
         </div>
+        {renderSharedOverlays()}
       </div>
     );
   }
@@ -1779,6 +2059,7 @@ export default function App() {
                 )}
                 {activeTab === "report" && (
                   <ReportView 
+                    isMobile={true}
                     onAddIssue={() => {
                       loadAllData();
                       setActiveTab(isGuest ? "maps" : "home");
@@ -1809,7 +2090,7 @@ export default function App() {
         </div>
 
         {/* Navigation bottom control bar bar */}
-        <div className={`h-16 bg-white border-t border-slate-200 flex items-center z-20 select-none px-5 ${isGuest ? 'justify-around' : 'justify-between'}`}>
+        <div className="h-16 bg-white border-t border-slate-200 flex items-center z-20 select-none px-3 justify-around">
           {!isGuest && (
             <button 
               onClick={() => {
@@ -1896,277 +2177,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Sign In & Sign Up Dedicated Page Overlay */}
-        <AnimatePresence>
-          {showAuthModal && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-50 z-50 flex flex-col justify-between p-6 select-none"
-            >
-              {/* Header Brand */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5">
-                  <ShieldCheck className="h-5 w-5 text-indigo-600 animate-pulse" />
-                  <span className="text-sm font-black tracking-widest text-slate-800 uppercase">IndiaCivic</span>
-                </div>
-                <button 
-                  onClick={() => {
-                    setShowAuthModal(false);
-                    setAuthError("");
-                  }}
-                  className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider cursor-pointer border border-slate-200"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  <span>Back</span>
-                </button>
-              </div>
-
-              {/* Main Container */}
-              <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full space-y-6">
-                <div className="text-center space-y-1.5">
-                  <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
-                    {authMode === 'signin' ? (
-                      <Lock className="h-5 w-5 text-indigo-600" />
-                    ) : signUpRole === 'CITIZEN' ? (
-                      <UserPlus className="h-5 w-5 text-indigo-600" />
-                    ) : (
-                      <Building className="h-5 w-5 text-indigo-600" />
-                    )}
-                  </div>
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-wider">
-                    {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {authMode === 'signin' 
-                      ? 'Access your civic workspace to resume local actions' 
-                      : signUpRole === 'CITIZEN' 
-                        ? 'Join IndiaCivic as a resident and start earning rewards'
-                        : 'Register your Organization, NGO, or RWA to host campaigns'}
-                  </p>
-                </div>
-
-                {authError && (
-                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-semibold leading-relaxed shadow-sm">
-                    {authError}
-                  </div>
-                )}
-
-                <form onSubmit={authMode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
-                  {authMode === 'signup' && (
-                    <div className="space-y-4">
-                      {/* Account Type Selector */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Choose Account Type</label>
-                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => setSignUpRole('CITIZEN')}
-                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                              signUpRole === 'CITIZEN' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <User className="h-3.5 w-3.5" />
-                            <span>Citizen</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSignUpRole('ORGANIZATION')}
-                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                              signUpRole === 'ORGANIZATION' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <Building className="h-3.5 w-3.5" />
-                            <span>Organization</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Email address */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Email Address</label>
-                    <div className="relative">
-                      <input 
-                        type="email"
-                        placeholder="e.g. neighbor@civic.in"
-                        value={authEmail}
-                        onChange={(e) => setAuthEmail(e.target.value)}
-                        required
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
-                      />
-                      <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
-
-                  {/* Password */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Password</label>
-                    <div className="relative">
-                      <input 
-                        type="password"
-                        placeholder="Min. 6 characters"
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        required
-                        minLength={6}
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
-                      />
-                      <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit"
-                    disabled={authLoading}
-                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-bold text-xs uppercase rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-md active:scale-95"
-                  >
-                    <span>{authLoading ? 'Syncing Profile...' : (authMode === 'signin' ? 'Sign In' : 'Create Account')}</span>
-                  </button>
-
-                  <div className="relative flex py-2 items-center">
-                    <div className="flex-grow border-t border-slate-200"></div>
-                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold uppercase tracking-wider">or continue with</span>
-                    <div className="flex-grow border-t border-slate-200"></div>
-                  </div>
-
-                  <button 
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={authLoading}
-                    className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 disabled:opacity-50 font-bold text-xs rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24">
-                      <path fill="#EA4335" d="M12 5.04c1.65 0 3.13.57 4.3 1.69l3.21-3.21C17.55 1.77 14.99 1 12 1 7.35 1 3.37 3.67 1.39 7.56l3.85 2.99c.91-2.73 3.47-4.51 6.76-4.51z" />
-                      <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.28 1.48-1.12 2.74-2.38 3.58l3.7 2.87c2.16-2 3.71-4.94 3.71-8.6z" />
-                      <path fill="#FBBC05" d="M5.24 14.55c-.24-.72-.38-1.5-.38-2.3 0-.8.14-1.58.38-2.3L1.39 7.56C.5 9.35 0 11.37 0 12.5s.5 3.15 1.39 4.94l3.85-2.89z" />
-                      <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.11.75-2.52 1.19-4.26 1.19-3.29 0-5.85-1.78-6.76-4.51L1.39 16.9C3.37 20.33 7.35 23 12 23z" />
-                    </svg>
-                    <span>Google Account</span>
-                  </button>
-                </form>
-
-                <div className="text-center">
-                  <button 
-                    onClick={() => {
-                      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
-                      setAuthError("");
-                    }}
-                    className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer bg-transparent border-none uppercase tracking-wide transition-colors"
-                  >
-                    {authMode === 'signin' ? "Don't have an account? Sign Up" : "Already registered? Sign In"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Secure footer */}
-              <div className="text-center text-[10px] text-slate-400 font-medium">
-                🔒 Secured by Firebase Authentication • IndiaCivic
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Upvote Optional Proof Modal Overlay */}
-        <AnimatePresence>
-          {showUpvoteProofModal && upvoteIssueId && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 select-none"
-            >
-              <motion.div 
-                initial={{ scale: 0.95, y: 15 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 15 }}
-                className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl border border-slate-100 text-left"
-              >
-                <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
-                    <ThumbsUp className="h-4 w-4 text-indigo-600" />
-                    <span>I have also seen this!</span>
-                  </h3>
-                  <button 
-                    onClick={() => setShowUpvoteProofModal(false)}
-                    className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                  Would you like to attach an optional photo or comment to help corroborate and verify this post? Contributing media boosts the post's visibility and earns you bonus reputation points.
-                </p>
-
-                {/* Optional Media Preview */}
-                <div className="space-y-3">
-                  {upvoteMedia ? (
-                    <div className="relative rounded-xl overflow-hidden border border-slate-200 h-24 bg-slate-100">
-                      <img src={upvoteMedia} className="w-full h-full object-cover animate-none" />
-                      <button 
-                        onClick={() => setUpvoteMedia(null)}
-                        className="absolute top-1.5 right-1.5 p-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full cursor-pointer border-none"
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="border border-dashed border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-50">
-                      <Camera className="h-4 w-4 text-slate-400 mb-0.5" />
-                      <label className="text-[9px] font-black text-indigo-600 hover:text-indigo-700 cursor-pointer uppercase tracking-wider">
-                        <span>Attach optional media</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const r = new FileReader();
-                              r.onload = () => setUpvoteMedia(r.result as string);
-                              r.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden" 
-                        />
-                      </label>
-                    </div>
-                  )}
-
-                  {/* Optional Text comment */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block font-mono">Optional corroboration notes</label>
-                    <input 
-                      type="text"
-                      placeholder="e.g. Yes, still flooded as of 1 hour ago..."
-                      value={upvoteText}
-                      onChange={(e) => setUpvoteText(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col space-y-2 pt-1.5">
-                  <button
-                    onClick={() => handleVote(upvoteIssueId, "UPVOTE", upvoteMedia || "skip_media", upvoteText || "Also seen")}
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-1.5 shadow-md border-none"
-                  >
-                    <span>Submit Upvote with Proof</span>
-                  </button>
-                  <button
-                    onClick={() => handleVote(upvoteIssueId, "UPVOTE", "skip_media", "Just upvoted")}
-                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center border-none"
-                  >
-                    <span>Just upvote (Skip proof)</span>
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {renderSharedOverlays()}
 
     </div>
   );

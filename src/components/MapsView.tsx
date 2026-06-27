@@ -141,6 +141,299 @@ interface CityPreset {
   sectorsOutlines: Record<string, { lat: number; lng: number }[]>;
 }
 
+const VECTOR_MAP_LAYERS: Record<"bengaluru" | "mumbai" | "delhi", {
+  waterBodies?: { name: string; points: { lat: number; lng: number }[]; color?: string; labelPosition?: { lat: number; lng: number } }[];
+  parks?: { name: string; points: { lat: number; lng: number }[] }[];
+  roads?: { name: string; points: { lat: number; lng: number }[]; width: number; isMain: boolean }[];
+  labels?: { text: string; lat: number; lng: number; isDistrict: boolean; isPark?: boolean }[];
+}> = {
+  bengaluru: {
+    waterBodies: [
+      {
+        name: "Ulsoor Lake",
+        points: [
+          { lat: 12.9820, lng: 77.6200 },
+          { lat: 12.9850, lng: 77.6250 },
+          { lat: 12.9780, lng: 77.6320 },
+          { lat: 12.9740, lng: 77.6280 },
+          { lat: 12.9750, lng: 77.6180 }
+        ],
+        color: "#E2EDF5",
+        labelPosition: { lat: 12.9790, lng: 77.6240 }
+      },
+      {
+        name: "Sankey Tank",
+        points: [
+          { lat: 13.0080, lng: 77.5720 },
+          { lat: 13.0110, lng: 77.5750 },
+          { lat: 13.0070, lng: 77.5780 },
+          { lat: 13.0050, lng: 77.5740 }
+        ],
+        color: "#E2EDF5",
+        labelPosition: { lat: 13.0075, lng: 77.5750 }
+      }
+    ],
+    parks: [
+      {
+        name: "Cubbon Park",
+        points: [
+          { lat: 12.9720, lng: 77.5900 },
+          { lat: 12.9760, lng: 77.5920 },
+          { lat: 12.9780, lng: 77.6000 },
+          { lat: 12.9730, lng: 77.6020 },
+          { lat: 12.9690, lng: 77.5950 }
+        ]
+      }
+    ],
+    roads: [
+      {
+        name: "MG Road",
+        points: [
+          { lat: 12.9740, lng: 77.5850 },
+          { lat: 12.9740, lng: 77.6450 }
+        ],
+        width: 12,
+        isMain: true
+      },
+      {
+        name: "100 Feet Road",
+        points: [
+          { lat: 12.9600, lng: 77.6400 },
+          { lat: 12.9900, lng: 77.6400 }
+        ],
+        width: 10,
+        isMain: true
+      },
+      {
+        name: "Malleshwaram 1st Main",
+        points: [
+          { lat: 12.9800, lng: 77.5700 },
+          { lat: 13.0100, lng: 77.5700 }
+        ],
+        width: 8,
+        isMain: false
+      },
+      {
+        name: "Residency Road",
+        points: [
+          { lat: 12.9680, lng: 77.5850 },
+          { lat: 12.9680, lng: 77.6350 }
+        ],
+        width: 8,
+        isMain: false
+      },
+      {
+        name: "Nrupathunga Road",
+        points: [
+          { lat: 12.9650, lng: 77.5850 },
+          { lat: 12.9750, lng: 77.5920 }
+        ],
+        width: 8,
+        isMain: false
+      }
+    ],
+    labels: [
+      { text: "SADASHIVANAGAR", lat: 13.0050, lng: 77.5800, isDistrict: true },
+      { text: "MALLESHWARAM", lat: 12.9920, lng: 77.5700, isDistrict: true },
+      { text: "SHIVAJINAGAR", lat: 12.9860, lng: 77.6050, isDistrict: true },
+      { text: "INDIRANAGAR", lat: 12.9740, lng: 77.6380, isDistrict: true },
+      { text: "JAYANAGAR", lat: 12.9350, lng: 77.5900, isDistrict: true },
+      { text: "CUBBON PARK", lat: 12.9735, lng: 77.5960, isDistrict: false, isPark: true }
+    ]
+  },
+  mumbai: {
+    waterBodies: [
+      {
+        name: "Arabian Sea",
+        points: [
+          { lat: 19.0850, lng: 72.8100 },
+          { lat: 19.0850, lng: 72.7800 },
+          { lat: 19.0350, lng: 72.7800 },
+          { lat: 19.0350, lng: 72.8150 },
+          { lat: 19.0420, lng: 72.8150 },
+          { lat: 19.0550, lng: 72.8200 },
+          { lat: 19.0680, lng: 72.8120 },
+          { lat: 19.0780, lng: 72.8130 }
+        ],
+        color: "#E2EDF5",
+        labelPosition: { lat: 19.0600, lng: 72.7950 }
+      },
+      {
+        name: "Mahim Creek",
+        points: [
+          { lat: 19.0450, lng: 72.8380 },
+          { lat: 19.0430, lng: 72.8450 },
+          { lat: 19.0380, lng: 72.8550 },
+          { lat: 19.0320, lng: 72.8500 },
+          { lat: 19.0380, lng: 72.8400 }
+        ],
+        color: "#E2EDF5",
+        labelPosition: { lat: 19.0400, lng: 72.8440 }
+      }
+    ],
+    parks: [
+      {
+        name: "Jogger's Park",
+        points: [
+          { lat: 19.0610, lng: 72.8130 },
+          { lat: 19.0630, lng: 72.8140 },
+          { lat: 19.0620, lng: 72.8160 },
+          { lat: 19.0600, lng: 72.8150 }
+        ]
+      }
+    ],
+    roads: [
+      {
+        name: "Linking Road",
+        points: [
+          { lat: 19.0800, lng: 72.8350 },
+          { lat: 19.0400, lng: 72.8350 }
+        ],
+        width: 12,
+        isMain: true
+      },
+      {
+        name: "Carter Road",
+        points: [
+          { lat: 19.0750, lng: 72.8150 },
+          { lat: 19.0680, lng: 72.8150 },
+          { lat: 19.0550, lng: 72.8220 },
+          { lat: 19.0480, lng: 72.8210 }
+        ],
+        width: 10,
+        isMain: true
+      },
+      {
+        name: "Hill Road",
+        points: [
+          { lat: 19.0620, lng: 72.8180 },
+          { lat: 19.0620, lng: 72.8450 }
+        ],
+        width: 8,
+        isMain: false
+      },
+      {
+        name: "Turner Road",
+        points: [
+          { lat: 19.0680, lng: 72.8180 },
+          { lat: 19.0580, lng: 72.8450 }
+        ],
+        width: 8,
+        isMain: false
+      }
+    ],
+    labels: [
+      { text: "BANDRA WEST", lat: 19.0600, lng: 72.8300, isDistrict: true },
+      { text: "PALI HILL", lat: 19.0630, lng: 72.8240, isDistrict: true },
+      { text: "KHAR WEST", lat: 19.0750, lng: 72.8330, isDistrict: true },
+      { text: "CARTER ROAD", lat: 19.0650, lng: 72.8170, isDistrict: true },
+      { text: "JOGGER'S PARK", lat: 19.0615, lng: 72.8145, isDistrict: false, isPark: true }
+    ]
+  },
+  delhi: {
+    waterBodies: [
+      {
+        name: "Central Park Pool",
+        points: [
+          { lat: 28.6310, lng: 77.2172 },
+          { lat: 28.6315, lng: 77.2177 },
+          { lat: 28.6310, lng: 77.2182 },
+          { lat: 28.6300, lng: 77.2182 },
+          { lat: 28.6295, lng: 77.2177 },
+          { lat: 28.6300, lng: 77.2172 }
+        ],
+        color: "#E2EDF5"
+      },
+      {
+        name: "Yamuna River",
+        points: [
+          { lat: 28.6600, lng: 77.2700 },
+          { lat: 28.6400, lng: 77.2650 },
+          { lat: 28.6200, lng: 77.2680 },
+          { lat: 28.6000, lng: 77.2750 }
+        ],
+        color: "#E2EDF5",
+        labelPosition: { lat: 28.6300, lng: 77.2700 }
+      }
+    ],
+    parks: [
+      {
+        name: "Central Park",
+        points: [
+          { lat: 28.6325, lng: 77.2165 },
+          { lat: 28.6325, lng: 77.2189 },
+          { lat: 28.6285, lng: 77.2189 },
+          { lat: 28.6285, lng: 77.2165 }
+        ]
+      }
+    ],
+    roads: [
+      {
+        name: "Janpath Road",
+        points: [
+          { lat: 28.6304, lng: 77.2177 },
+          { lat: 28.6150, lng: 77.2190 }
+        ],
+        width: 10,
+        isMain: true
+      },
+      {
+        name: "Sansad Marg",
+        points: [
+          { lat: 28.6304, lng: 77.2177 },
+          { lat: 28.6180, lng: 77.2080 }
+        ],
+        width: 10,
+        isMain: true
+      },
+      {
+        name: "Barakhamba Road",
+        points: [
+          { lat: 28.6304, lng: 77.2177 },
+          { lat: 28.6300, lng: 77.2380 }
+        ],
+        width: 10,
+        isMain: true
+      },
+      {
+        name: "Kasturba Gandhi Marg",
+        points: [
+          { lat: 28.6304, lng: 77.2177 },
+          { lat: 28.6200, lng: 77.2280 }
+        ],
+        width: 10,
+        isMain: true
+      },
+      {
+        name: "Baba Kharak Singh Marg",
+        points: [
+          { lat: 28.6304, lng: 77.2177 },
+          { lat: 28.6230, lng: 77.2020 }
+        ],
+        width: 8,
+        isMain: false
+      },
+      {
+        name: "Panchkuian Marg",
+        points: [
+          { lat: 28.6304, lng: 77.2177 },
+          { lat: 28.6380, lng: 77.1980 }
+        ],
+        width: 8,
+        isMain: false
+      }
+    ],
+    labels: [
+      { text: "CONNAUGHT PLACE", lat: 28.6304, lng: 77.2177, isDistrict: true },
+      { text: "JANPATH", lat: 28.6240, lng: 77.2190, isDistrict: true },
+      { text: "PAHARGANJ", lat: 28.6410, lng: 77.2050, isDistrict: true },
+      { text: "MINTO ROAD", lat: 28.6250, lng: 77.2280, isDistrict: true },
+      { text: "BARAKHAMBA", lat: 28.6320, lng: 77.2340, isDistrict: true },
+      { text: "CENTRAL PARK CP", lat: 28.6300, lng: 77.2177, isDistrict: false, isPark: true }
+    ]
+  }
+};
+
 interface SectorData {
   id: string;
   name: string;
@@ -732,13 +1025,73 @@ export default function MapsView({
     return 0.05 / Math.pow(1.8, zoom - 10);
   };
 
+  // Compute dynamic projection parameters (center and scale) shared between all vector layers
+  const projectionParams = useMemo(() => {
+    const cityCenter = currentPreset.center;
+    const cityIssues = issues.filter(iss => {
+      const lat = Number(iss.latitude);
+      const lng = Number(iss.longitude);
+      if (isNaN(lat) || isNaN(lng)) return false;
+      const issueState = getIssueState(iss);
+      if (!selectedStates.includes(issueState)) return false;
+      return true;
+    });
+
+    let filteredCityIssues = [...cityIssues];
+    if (severityFilter !== "all") {
+      const targetSev = severityFilter === "high" ? [4, 5] : severityFilter === "med" ? [3] : [1, 2];
+      filteredCityIssues = filteredCityIssues.filter(iss => targetSev.includes(iss.severity));
+    }
+    if (statusFilter !== "all") {
+      filteredCityIssues = filteredCityIssues.filter(iss => iss.status === statusFilter);
+    }
+    if (categoryFilter !== "all") {
+      filteredCityIssues = filteredCityIssues.filter(iss => {
+        const cat = (iss.category || "").toLowerCase();
+        if (categoryFilter === "garbage") return cat.includes("waste") || cat.includes("garbage") || cat.includes("litter") || cat.includes("trash");
+        if (categoryFilter === "streetlight") return cat.includes("light") || cat.includes("electricity") || cat.includes("power") || cat.includes("streetlight");
+        if (categoryFilter === "water") return cat.includes("water") || cat.includes("drainage") || cat.includes("sewage") || cat.includes("waterlogging");
+        if (categoryFilter === "assets") return cat.includes("asset") || cat.includes("road") || cat.includes("pothole") || cat.includes("footpath");
+        return cat.includes(categoryFilter.toLowerCase());
+      });
+    }
+
+    let centerLat = cityCenter.lat;
+    let centerLng = cityCenter.lng;
+    let scaleMultiplier = 5000; // Base scale for elegant detailed rendering
+
+    if (filteredCityIssues.length > 0) {
+      const lats = filteredCityIssues.map(i => Number(i.latitude)).filter(n => !isNaN(n));
+      const lngs = filteredCityIssues.map(i => Number(i.longitude)).filter(n => !isNaN(n));
+      if (lats.length > 0) {
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+
+        const dLatSpan = maxLat - minLat;
+        const dLngSpan = maxLng - minLng;
+        const maxSpan = Math.max(dLatSpan, dLngSpan);
+
+        centerLat = (minLat + maxLat) / 2;
+        centerLng = (minLng + maxLng) / 2;
+
+        if (maxSpan > 0.05) {
+          // Scale down multiplier proportionally to the coordinates span
+          scaleMultiplier = Math.min(5000, 350 / maxSpan);
+        }
+      }
+    }
+
+    return { centerLat, centerLng, scaleMultiplier };
+  }, [issues, currentPreset, severityFilter, statusFilter, categoryFilter, selectedStates]);
+
   const currentClusters = useMemo(() => {
     const zoom = viewMode === "real" ? mapZoom : (11 + vectorZoomLevel);
     const threshold = getThreshold(zoom);
     const resultClusters: MapCluster[] = [];
 
     // Filter by state selection, ignoring proximity constraints to show all reports in selected states combined
-    const cityCenter = currentPreset.center;
     const cityIssues = issues.filter(iss => {
       const lat = Number(iss.latitude);
       const lng = Number(iss.longitude);
@@ -816,33 +1169,7 @@ export default function MapsView({
       }
     }
 
-    // Dynamic auto-centering & auto-scaling calculation for fallback Vector Canvas
-    let centerLat = cityCenter.lat;
-    let centerLng = cityCenter.lng;
-    let scaleMultiplier = 4000;
-
-    if (filteredCityIssues.length > 0) {
-      const lats = filteredCityIssues.map(i => Number(i.latitude)).filter(n => !isNaN(n));
-      const lngs = filteredCityIssues.map(i => Number(i.longitude)).filter(n => !isNaN(n));
-      if (lats.length > 0) {
-        const minLat = Math.min(...lats);
-        const maxLat = Math.max(...lats);
-        const minLng = Math.min(...lngs);
-        const maxLng = Math.max(...lngs);
-
-        const dLatSpan = maxLat - minLat;
-        const dLngSpan = maxLng - minLng;
-        const maxSpan = Math.max(dLatSpan, dLngSpan);
-
-        centerLat = (minLat + maxLat) / 2;
-        centerLng = (minLng + maxLng) / 2;
-
-        if (maxSpan > 0.05) {
-          // Scale down multiplier proportionally to the coordinates span
-          scaleMultiplier = Math.min(4000, 300 / maxSpan);
-        }
-      }
-    }
+    const { centerLat, centerLng, scaleMultiplier } = projectionParams;
 
     // Post-process the clusters to define size, color, label, locality, and vector coordinates
     return resultClusters.map((cluster) => {
@@ -886,7 +1213,7 @@ export default function MapsView({
 
       return cluster;
     });
-  }, [issues, viewMode, mapZoom, vectorZoomLevel, currentPreset, severityFilter, statusFilter, categoryFilter, selectedStates]);
+  }, [issues, viewMode, mapZoom, vectorZoomLevel, currentPreset, severityFilter, statusFilter, categoryFilter, selectedStates, projectionParams]);
 
   // Dynamic calculations of active and total reports from the actual database for selected states
   const activeCount = useMemo(() => {
@@ -1254,18 +1581,8 @@ export default function MapsView({
         </div>
       </div>
 
-      {/* 3. MAP HUD OVERLAYS (Allows toggling map view mode if Google Key Available) */}
+      {/* 3. MAP HUD OVERLAYS */}
       <div className="absolute top-26 inset-x-3 z-30 flex items-center justify-end pointer-events-none gap-2">
-        {/* Real / Vector Toggle (If Google Key Available) */}
-        {hasValidKey && (
-          <button
-            onClick={() => setViewMode(prev => prev === "real" ? "vector" : "real")}
-            className="px-2.5 py-1.5 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl text-[9px] font-black uppercase shadow-md pointer-events-auto text-slate-700 hover:text-slate-900 flex items-center space-x-1"
-          >
-            <MapIcon className="h-3.5 w-3.5 text-rose-500" />
-            <span>{viewMode === "real" ? "GOOGLE" : "VECTOR"}</span>
-          </button>
-        )}
       </div>
 
       {/* 4. MAIN MAP / LIST WRAPPER STAGE */}
@@ -2218,65 +2535,21 @@ export default function MapsView({
               </div>
 
               {/* Styled Vector QR Code matching the platform colors */}
-              <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl inline-block shadow-inner">
-                <svg className="h-40 w-40 mx-auto" viewBox="0 0 100 100" fill="none">
-                  {/* Background */}
-                  <rect width="100" height="100" rx="10" fill="#FFFFFF" />
-                  
-                  {/* Position detection patterns (Three corners) */}
-                  <rect x="5" y="5" width="24" height="24" rx="3" fill="#0F172A" />
-                  <rect x="9" y="9" width="16" height="16" rx="2" fill="#FFFFFF" />
-                  <rect x="13" y="13" width="8" height="8" rx="1" fill="#801D26" />
-
-                  <rect x="71" y="5" width="24" height="24" rx="3" fill="#0F172A" />
-                  <rect x="75" y="9" width="16" height="16" rx="2" fill="#FFFFFF" />
-                  <rect x="79" y="13" width="8" height="8" rx="1" fill="#801D26" />
-
-                  <rect x="5" y="71" width="24" height="24" rx="3" fill="#0F172A" />
-                  <rect x="9" y="75" width="16" height="16" rx="2" fill="#FFFFFF" />
-                  <rect x="13" y="79" width="8" height="8" rx="1" fill="#801D26" />
-
-                  {/* QR random grid patterns */}
-                  <g fill="#0F172A">
-                    <rect x="35" y="5" width="4" height="8" />
-                    <rect x="43" y="9" width="8" height="4" />
-                    <rect x="55" y="5" width="4" height="4" />
-                    <rect x="63" y="13" width="4" height="8" />
-                    
-                    <rect x="35" y="21" width="12" height="4" />
-                    <rect x="51" y="17" width="8" height="8" />
-                    <rect x="63" y="25" width="4" height="4" />
-                    
-                    <rect x="5" y="35" width="8" height="4" />
-                    <rect x="17" y="39" width="4" height="12" />
-                    <rect x="25" y="35" width="12" height="4" />
-                    
-                    <rect x="5" y="51" width="4" height="8" />
-                    <rect x="13" y="55" width="8" height="4" />
-                    <rect x="25" y="47" width="8" height="8" />
-                    <rect x="37" y="55" width="12" height="4" />
-
-                    <rect x="51" y="35" width="16" height="4" />
-                    <rect x="71" y="35" width="4" height="16" />
-                    <rect x="79" y="43" width="12" height="4" />
-                    <rect x="83" y="51" width="4" height="8" />
-
-                    <rect x="55" y="47" width="8" height="8" />
-                    <rect x="67" y="55" width="16" height="4" />
-                    
-                    <rect x="35" y="71" width="4" height="8" />
-                    <rect x="43" y="79" width="8" height="4" />
-                    <rect x="55" y="71" width="12" height="4" />
-                    <rect x="71" y="71" width="4" height="4" />
-                    <rect x="79" y="75" width="8" height="8" />
-
-                    <rect x="35" y="87" width="16" height="4" />
-                    <rect x="55" y="83" width="8" height="8" />
-                    <rect x="67" y="87" width="12" height="4" />
-                    <rect x="83" y="83" width="4" height="12" />
-                  </g>
-                </svg>
-              </div>
+              <a 
+                href="https://indiacivic-811492221296.asia-south1.run.app/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="block hover:scale-102 transition-transform cursor-pointer"
+              >
+                <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl inline-block shadow-inner hover:border-indigo-200 transition-colors">
+                  <img 
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=0f172a&format=svg&data=https://indiacivic-811492221296.asia-south1.run.app/" 
+                    alt="Citizen QR Portal Link" 
+                    className="h-40 w-40 mx-auto object-contain bg-white p-2 rounded-2xl"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </a>
 
               <div className="space-y-1">
                 <p className="text-xs font-bold text-slate-800">Scan on WhatsApp or Web Browser</p>
