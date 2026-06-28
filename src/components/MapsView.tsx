@@ -37,7 +37,8 @@ import {
   MessageSquare,
   Send,
   Camera,
-  CheckSquare
+  CheckSquare,
+  Activity
 } from "lucide-react";
 import { APIProvider, Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
 import { Issue } from "../types";
@@ -129,6 +130,105 @@ const LIGHT_MAP_STYLE = [
     ]
   }
 ];
+
+// Dark Map Theme for Streetlight Overlay Mode
+const DARK_MAP_STYLE = [
+  {
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#0d1321" }
+    ]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [
+      { "color": "#8c9fb8" }
+    ]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      { "color": "#0d1321" },
+      { "weight": 2 }
+    ]
+  },
+  {
+    "featureType": "administrative",
+    "elementType": "geometry.stroke",
+    "stylers": [
+      { "color": "#1e293b" },
+      { "weight": 1.2 }
+    ]
+  },
+  {
+    "featureType": "landscape",
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#111827" }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#1f2937" }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry.stroke",
+    "stylers": [
+      { "color": "#111827" }
+    ]
+  },
+  {
+    "featureType": "transit",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#030712" }
+    ]
+  }
+];
+
+// Helper to check if issue represents a women unsafe situation
+const isWomenUnsafe = (issue: any): boolean => {
+  const cat = (issue.category || "").toLowerCase();
+  const title = (issue.title || "").toLowerCase();
+  const desc = (issue.description || "").toLowerCase();
+  
+  return (
+    cat.includes("safety") || cat.includes("women") || cat.includes("unsafe") ||
+    title.includes("safety") || title.includes("women") || title.includes("unsafe") || title.includes("harassment") || title.includes("eve teasing") || title.includes("girl") || title.includes("dark area") || title.includes("dark alley") ||
+    desc.includes("safety") || desc.includes("women") || desc.includes("unsafe") || desc.includes("harassment") || desc.includes("eve teasing") || desc.includes("girl") || desc.includes("dark area") || desc.includes("dark alley")
+  );
+};
+
+// Helper for Ray-Casting Point-in-Polygon check for safety heatmap zones
+const isPointInPolygon = (lat: number, lng: number, polygon: { lat: number; lng: number }[]): boolean => {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lat, yi = polygon[i].lng;
+    const xj = polygon[j].lat, yj = polygon[j].lng;
+    
+    const intersect = ((yi > lng) !== (yj > lng))
+        && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
 
 interface CityPreset {
   name: string;
@@ -453,6 +553,9 @@ interface MapsViewProps {
   onRefreshData?: () => void;
   setAuthMode?: (mode: "login" | "signup" | null) => void;
   setShowAuthModal?: (show: boolean) => void;
+  theme?: "light" | "dark";
+  isThemeTransitioning?: boolean;
+  userCoords?: { lat: number; lng: number } | null;
 }
 
 // Unified interface for clusters
@@ -503,7 +606,10 @@ export default function MapsView({
   userProfile,
   onRefreshData,
   setAuthMode,
-  setShowAuthModal
+  setShowAuthModal,
+  theme = "light",
+  isThemeTransitioning = false,
+  userCoords = null
 }: MapsViewProps) {
   const [activeTab, setActiveTab] = useState<"map" | "list">("map");
   const [severityFilter, setSeverityFilter] = useState<"all" | "high" | "med" | "low">("all");
@@ -513,6 +619,12 @@ export default function MapsView({
   const [selectedSector, setSelectedSector] = useState<string>("sector-2");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"real" | "vector">(hasValidKey ? "real" : "vector");
+  
+  // displayMode can be 'analytical' (prediction map and hot spot clusters) or 'reports' (live report bubbles with custom category icons & street light glows)
+  const [displayMode, setDisplayMode] = useState<"analytical" | "reports">("analytical");
+  const [heatmapType, setHeatmapType] = useState<"none" | "streetlight" | "womensafety" | "overall">("none");
+  const [isHeatmapMenuOpen, setIsHeatmapMenuOpen] = useState(false);
+
   
   // State selection and search States
   const [selectedStates, setSelectedStates] = useState<string[]>(ALL_STATES);
@@ -536,6 +648,8 @@ export default function MapsView({
   
   // Scannable QR modal
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  
+  const isMapDark = theme === "dark" || (displayMode === "reports" && categoryFilter === "streetlight");
   
   // Selected cluster state for popup info
   const [selectedCluster, setSelectedCluster] = useState<MapCluster | null>(null);
@@ -1185,6 +1299,43 @@ export default function MapsView({
         cluster.color = "burgundy";
       }
 
+      // Check for safety issues / women unsafe
+      const hasWomenUnsafe = cluster.issues.some(iss => isWomenUnsafe(iss));
+      
+      // Determine dominant category of this cluster
+      const categoriesList = cluster.issues.map(iss => {
+        if (isWomenUnsafe(iss)) return "women_unsafe";
+        const cat = (iss.category || "").toLowerCase();
+        if (cat.includes("waste") || cat.includes("garbage") || cat.includes("litter") || cat.includes("trash")) return "garbage";
+        if (cat.includes("light") || cat.includes("electricity") || cat.includes("power") || cat.includes("streetlight")) return "streetlight";
+        if (cat.includes("water") || cat.includes("drainage") || cat.includes("sewage") || cat.includes("waterlogging")) return "water";
+        if (cat.includes("asset") || cat.includes("road") || cat.includes("pothole") || cat.includes("footpath")) return "assets";
+        return "other";
+      });
+
+      let dominantCategory = "other";
+      if (categoriesList.includes("women_unsafe")) {
+        dominantCategory = "women_unsafe";
+      } else if (categoriesList.includes("water")) {
+        dominantCategory = "water";
+      } else if (categoriesList.includes("streetlight")) {
+        dominantCategory = "streetlight";
+      } else if (categoriesList.includes("garbage")) {
+        dominantCategory = "garbage";
+      } else if (categoriesList.includes("assets")) {
+        dominantCategory = "assets";
+      } else if (cluster.issues.length > 0) {
+        // Fallback to first issue category if any
+        const firstCat = (cluster.issues[0].category || "").toLowerCase();
+        if (firstCat.includes("waste") || firstCat.includes("garbage") || firstCat.includes("litter") || firstCat.includes("trash")) dominantCategory = "garbage";
+        else if (firstCat.includes("light") || firstCat.includes("electricity") || firstCat.includes("power") || firstCat.includes("streetlight")) dominantCategory = "streetlight";
+        else if (firstCat.includes("water") || firstCat.includes("drainage") || firstCat.includes("sewage") || firstCat.includes("waterlogging")) dominantCategory = "water";
+        else if (firstCat.includes("asset") || firstCat.includes("road") || firstCat.includes("pothole") || firstCat.includes("footpath")) dominantCategory = "assets";
+      }
+
+      (cluster as any).dominantCategory = dominantCategory;
+      (cluster as any).hasWomenUnsafe = hasWomenUnsafe;
+
       // Dynamic size from 42px to 80px based on report intensity
       cluster.size = Math.min(80, 42 + (count - 1) * 6);
 
@@ -1359,6 +1510,108 @@ export default function MapsView({
     return "bg-[#F57C1F] hover:bg-[#FF8D36] text-white ring-4 ring-[#F57C1F]/20";
   };
 
+  const getClusterBubbleContent = (cluster: any, currentDisplayMode: "analytical" | "reports") => {
+    const isUnsafe = cluster.hasWomenUnsafe || cluster.issues?.some((iss: any) => isWomenUnsafe(iss));
+    const dominantCat = cluster.dominantCategory || "other";
+    const label = cluster.label;
+
+    // If women unsafe, we ALWAYS show the triangle warning symbol to distinguish easily
+    if (isUnsafe) {
+      return (
+        <div className="relative flex items-center justify-center select-none group">
+          {/* Glow effect */}
+          <div className="absolute rounded-full bg-rose-500/20 blur-md animate-pulse" style={{ width: '48px', height: '48px' }} />
+          <div className="relative w-10 h-10 bg-amber-400 hover:bg-amber-500 border-2 border-rose-600 rounded-full flex items-center justify-center shadow-xl transition-all duration-150 transform hover:scale-110 active:scale-95 cursor-pointer text-rose-950">
+            <AlertTriangle className="h-5 w-5 text-rose-700 stroke-[3.5]" />
+            {/* Small count badge if > 1 */}
+            {parseInt(label) > 1 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[9px] font-black h-4.5 w-4.5 rounded-full flex items-center justify-center border border-white">
+                {label}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Under analytical mode, we default to the gorgeous original count bubbles
+    if (currentDisplayMode === "analytical") {
+      return (
+        <div 
+          style={{
+            width: `${cluster.size}px`,
+            height: `${cluster.size}px`
+          }}
+          className={`${getClusterColorClass(cluster.color)} border-2 border-white shadow-xl rounded-full flex items-center justify-center font-extrabold text-xs cursor-pointer transform hover:scale-110 active:scale-95 transition-all duration-150`}
+        >
+          {cluster.label}
+        </div>
+      );
+    }
+
+    // Under reports mode, we show custom category icons
+    let bgClass = "bg-[#801D26]"; // Burgundy default
+    let iconEl = <Layers className="h-4.5 w-4.5 text-white" />;
+
+    if (dominantCat === "garbage") {
+      bgClass = "bg-[#10B981] hover:bg-[#059669] border-[#047857]"; // Emerald
+      iconEl = <Trash2 className="h-4.5 w-4.5 text-white" />;
+    } else if (dominantCat === "streetlight") {
+      bgClass = "bg-[#FBBF24] hover:bg-[#F59E0B] border-[#D97706]"; // Golden/Yellow
+      iconEl = <Lightbulb className="h-4.5 w-4.5 text-amber-950 fill-amber-300/30" />;
+    } else if (dominantCat === "water") {
+      bgClass = "bg-[#06B6D4] hover:bg-[#0891B2] border-[#0E7490]"; // Cyan/Blue
+      iconEl = (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-white">
+          <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 10.7 5 15a7 7 0 0 0 7 7z" />
+          <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" />
+        </svg>
+      );
+    } else if (dominantCat === "assets") {
+      bgClass = "bg-[#4F46E5] hover:bg-[#4338CA] border-[#3730A3]"; // Indigo
+      iconEl = <Wrench className="h-4.5 w-4.5 text-white" />;
+    }
+
+    return (
+      <div className="relative flex items-center justify-center group select-none">
+        {/* If category is streetlight, we display dynamic glowing ambient shadows representing report counts */}
+        {dominantCat === "streetlight" && (
+          <>
+            <div 
+              className="absolute rounded-full bg-amber-400/20 blur-md animate-pulse" 
+              style={{ 
+                width: `${Math.max(60, 48 + parseInt(label) * 8)}px`, 
+                height: `${Math.max(60, 48 + parseInt(label) * 8)}px` 
+              }} 
+            />
+            <div 
+              className="absolute rounded-full bg-amber-300/10 blur-xl" 
+              style={{ 
+                width: `${Math.max(120, 80 + parseInt(label) * 15)}px`, 
+                height: `${Math.max(120, 80 + parseInt(label) * 15)}px` 
+              }} 
+            />
+          </>
+        )}
+
+        {/* Actual Icon Bubble */}
+        <div 
+          style={{ width: '40px', height: '40px' }}
+          className={`${bgClass} border-2 border-white shadow-xl rounded-full flex items-center justify-center cursor-pointer transform hover:scale-115 active:scale-95 transition-all duration-150`}
+        >
+          {iconEl}
+          
+          {/* Count Badge on the side for merged reports */}
+          {parseInt(label) > 1 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-slate-900 text-white text-[8px] font-black h-4.5 w-4.5 rounded-full flex items-center justify-center border border-white">
+              {label}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Filter issues list if they toggle to "List" mode
   const filteredIssuesList = useMemo(() => {
     let result = [...issues];
@@ -1411,17 +1664,27 @@ export default function MapsView({
   const listFeedItems = filteredIssuesList;
 
   return (
-    <div className="relative w-full h-full bg-[#FAF2EB] overflow-hidden flex flex-col font-sans select-none text-[#1e293b]">
+    <div className={`relative w-full h-full overflow-hidden flex flex-col font-sans select-none transition-colors duration-500 ${
+      theme === "dark" ? "bg-[#0b0f19] text-slate-100" : "bg-[#FAF2EB] text-[#1e293b]"
+    }`}>
       
       {/* 2. FILTER & SECTOR SELECTORS BAR (Strictly matching the layout of the screenshots) */}
-      <div className="bg-white border-b border-slate-100 p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-40 shadow-sm relative">
+      <div className={`p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-40 shadow-sm relative border-b transition-all duration-500 ${
+        theme === "dark" 
+          ? "bg-[#0f172a] border-slate-800 text-slate-100" 
+          : "bg-white border-slate-150 text-[#1e293b]"
+      }`}>
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           {/* Severity Dropdown */}
           <div className="relative flex-1 sm:flex-initial min-w-0 w-full">
             <select 
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value as any)}
-              className="appearance-none bg-white border border-slate-200 pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm w-full sm:min-w-[120px]"
+              className={`appearance-none pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold focus:outline-none cursor-pointer shadow-sm w-full sm:min-w-[120px] transition-all duration-300 ${
+                theme === "dark"
+                  ? "bg-[#1e293b] border-slate-700 text-slate-200 focus:border-slate-500"
+                  : "bg-white border-slate-200 text-slate-700 focus:border-slate-400"
+              }`}
             >
               <option value="all">All Severity</option>
               <option value="high">High (4-5)</option>
@@ -1436,7 +1699,11 @@ export default function MapsView({
             <select 
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="appearance-none bg-white border border-slate-200 pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm w-full sm:min-w-[120px]"
+              className={`appearance-none pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold focus:outline-none cursor-pointer shadow-sm w-full sm:min-w-[120px] transition-all duration-300 ${
+                theme === "dark"
+                  ? "bg-[#1e293b] border-slate-700 text-slate-200 focus:border-slate-500"
+                  : "bg-white border-slate-200 text-slate-700 focus:border-slate-400"
+              }`}
             >
               <option value="all">All Status</option>
               <option value="PENDING">Pending</option>
@@ -1451,7 +1718,11 @@ export default function MapsView({
             <button
               type="button"
               onClick={() => setIsStateDropdownOpen(!isStateDropdownOpen)}
-              className="appearance-none bg-white border border-slate-200 pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer shadow-sm w-full sm:min-w-[140px] flex items-center justify-between gap-1 text-left relative"
+              className={`appearance-none pl-2 pr-6 sm:pl-3 sm:pr-8 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold focus:outline-none cursor-pointer shadow-sm w-full sm:min-w-[140px] flex items-center justify-between gap-1 text-left relative transition-all duration-300 ${
+                theme === "dark"
+                  ? "bg-[#1e293b] border-slate-700 text-slate-200 focus:border-slate-500"
+                  : "bg-white border-slate-200 text-slate-700 focus:border-slate-400"
+              }`}
             >
               <span className="truncate max-w-[80px] xs:max-w-[105px]">
                 {selectedStates.length === ALL_STATES.length
@@ -1466,9 +1737,17 @@ export default function MapsView({
             </button>
 
             {isStateDropdownOpen && (
-              <div className="absolute right-0 mt-1.5 w-64 max-w-[calc(100vw-32px)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2.5 flex flex-col space-y-2 text-left origin-top-right">
+              <div className={`absolute right-0 mt-1.5 w-64 max-w-[calc(100vw-32px)] rounded-xl shadow-xl z-50 p-2.5 flex flex-col space-y-2 text-left origin-top-right border transition-all duration-300 ${
+                theme === "dark"
+                  ? "bg-[#0f172a] border-slate-800 text-slate-200"
+                  : "bg-white border-slate-200 text-slate-800"
+              }`}>
                 {/* State Search Bar */}
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
+                <div className={`flex items-center gap-1 rounded-lg p-1 border transition-all duration-300 ${
+                  theme === "dark"
+                    ? "bg-[#1d2432] border-slate-700 text-slate-200"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}>
                   <input
                     type="text"
                     placeholder="Search state..."
@@ -1480,7 +1759,9 @@ export default function MapsView({
                         handleStateSearch();
                       }
                     }}
-                    className="bg-transparent border-none text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none px-1.5 py-1 w-full font-medium"
+                    className={`bg-transparent border-none text-xs placeholder:text-slate-400 focus:outline-none px-1.5 py-1 w-full font-medium ${
+                      theme === "dark" ? "text-slate-200" : "text-slate-700"
+                    }`}
                   />
                   <button
                     type="button"
@@ -1494,7 +1775,9 @@ export default function MapsView({
 
                 {/* Clear Search Indicator if searched */}
                 {activeSearchedState && (
-                  <div className="flex items-center justify-between text-[10px] bg-slate-100 text-slate-700 px-2 py-1 rounded-md font-semibold">
+                  <div className={`flex items-center justify-between text-[10px] px-2 py-1 rounded-md font-semibold ${
+                    theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"
+                  }`}>
                     <span>Result: "{activeSearchedState}"</span>
                     <button
                       type="button"
@@ -1512,26 +1795,32 @@ export default function MapsView({
                 {/* States List with Scrollbar */}
                 <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
                   {/* Primary Checkbox: All */}
-                  <label className="flex items-center space-x-2 px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors text-left w-full select-none">
+                  <label className={`flex items-center space-x-2 px-2 py-1 rounded-lg cursor-pointer transition-colors text-left w-full select-none ${
+                    theme === "dark" ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  }`}>
                     <input
                       type="checkbox"
                       checked={selectedStates.length === ALL_STATES.length}
                       onChange={handleToggleAllStates}
                       className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer accent-indigo-600"
                     />
-                    <span className="text-xs font-bold text-slate-800">All States</span>
+                    <span className={`text-xs font-bold ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>All States</span>
                   </label>
 
-                  <div className="border-t border-slate-100 my-1" />
+                  <div className={`border-t my-1 ${theme === "dark" ? "border-slate-800" : "border-slate-100"}`} />
 
                   {/* Individual States */}
                   {orderedStates.map((state) => (
                     <label
                       key={state}
-                      className={`flex items-center space-x-2 px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors text-left w-full select-none ${
+                      className={`flex items-center space-x-2 px-2 py-1 rounded-lg cursor-pointer transition-colors text-left w-full select-none ${
                         activeSearchedState && state.toLowerCase().includes(activeSearchedState.toLowerCase())
-                          ? "bg-amber-50/70 border border-amber-150"
-                          : ""
+                          ? theme === "dark"
+                            ? "bg-amber-950/40 border border-amber-800"
+                            : "bg-amber-50/70 border border-amber-150"
+                          : theme === "dark"
+                          ? "hover:bg-slate-800"
+                          : "hover:bg-slate-50"
                       }`}
                     >
                       <input
@@ -1540,7 +1829,7 @@ export default function MapsView({
                         onChange={() => handleToggleState(state)}
                         className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer accent-indigo-600"
                       />
-                      <span className="text-xs font-semibold text-slate-700 flex-1">{state}</span>
+                      <span className={`text-xs font-semibold flex-1 ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}>{state}</span>
                       {activeSearchedState && state.toLowerCase().includes(activeSearchedState.toLowerCase()) && (
                         <span className="text-[8px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-90">
                           Match
@@ -1557,13 +1846,21 @@ export default function MapsView({
         </div>
 
         {/* Tab Selector Segment Control (Map | List) */}
-        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-stretch sm:self-auto shrink-0 shadow-inner">
+        <div className={`flex p-1 rounded-lg border self-stretch sm:self-auto shrink-0 shadow-inner transition-all duration-300 ${
+          theme === "dark"
+            ? "bg-[#131b2d] border-slate-800"
+            : "bg-slate-100 border-slate-200"
+        }`}>
           <button
             onClick={() => setActiveTab("map")}
             className={`flex-1 sm:flex-none px-4 py-1 rounded-md text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "map"
-                ? "bg-white text-slate-900 border border-slate-200 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+                ? theme === "dark"
+                  ? "bg-[#1e293b] text-white border border-slate-700 shadow-sm"
+                  : "bg-white text-slate-900 border border-slate-200 shadow-sm"
+                : theme === "dark"
+                  ? "text-slate-400 hover:text-slate-200"
+                  : "text-slate-500 hover:text-slate-800"
             }`}
           >
             Map
@@ -1572,8 +1869,12 @@ export default function MapsView({
             onClick={() => setActiveTab("list")}
             className={`flex-1 sm:flex-none px-4 py-1 rounded-md text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "list"
-                ? "bg-white text-slate-900 border border-slate-200 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+                ? theme === "dark"
+                  ? "bg-[#1e293b] text-white border border-slate-700 shadow-sm"
+                  : "bg-white text-slate-900 border border-slate-200 shadow-sm"
+                : theme === "dark"
+                  ? "text-slate-400 hover:text-slate-200"
+                  : "text-slate-500 hover:text-slate-800"
             }`}
           >
             List ({listFeedItems.length})
@@ -1582,34 +1883,97 @@ export default function MapsView({
       </div>
 
       {/* 3. MAP HUD OVERLAYS */}
-      <div className="absolute top-26 inset-x-3 z-30 flex items-center justify-end pointer-events-none gap-2">
+      <div className="absolute top-2.5 right-2.5 z-30 flex items-center pointer-events-auto gap-2">
+        <div className="bg-white/95 dark:bg-[#131b2d]/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800/80 p-1 rounded-2xl shadow-xl flex items-center space-x-1">
+          <button
+            onClick={() => setDisplayMode("analytical")}
+            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-200 cursor-pointer ${
+              displayMode === "analytical"
+                ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Layers className="h-3 w-3 shrink-0" />
+            <span className="whitespace-nowrap">Analytical View</span>
+          </button>
+          <button
+            onClick={() => setDisplayMode("reports")}
+            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-200 cursor-pointer ${
+              displayMode === "reports"
+                ? "bg-indigo-600 dark:bg-indigo-500 text-white shadow-md"
+                : "text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-[#1e293b]/40"
+            }`}
+          >
+            <Activity className="h-3 w-3 shrink-0" />
+            <span className="whitespace-nowrap">Report Bubbles</span>
+          </button>
+        </div>
       </div>
 
       {/* 4. MAIN MAP / LIST WRAPPER STAGE */}
-      <div className="flex-1 w-full relative overflow-hidden">
+      <div className={`flex-1 w-full relative overflow-hidden ${isThemeTransitioning ? "z-[10000]" : ""}`}>
         
         {activeTab === "map" ? (
           <>
             {/* FLOATING ACTIVE STATE COUNTERS OVERLAY CARD (Pill style exactly as screenshot) */}
             <div className="absolute top-4 left-3 z-30 pointer-events-auto">
-              <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-2 flex items-center space-x-4 shadow-lg">
+              <div className={`rounded-2xl border px-4 py-2 flex items-center space-x-4 shadow-lg transition-colors duration-500 ${
+                theme === "dark"
+                  ? "bg-[#131b2d]/95 border-slate-800/80 text-slate-100"
+                  : "bg-white border-slate-200/80 text-slate-500"
+              }`}>
                 <div className="flex flex-col text-left">
                   <div className="flex items-baseline space-x-1.5">
-                    <span className="text-lg font-black text-[#DC2626] tracking-tight">{activeCount}</span>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Active</span>
+                    <span className="text-lg font-black text-[#DC2626] dark:text-[#ff4b4b] tracking-tight">{activeCount}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Active</span>
                   </div>
                 </div>
                 
-                <div className="h-8 w-[1px] bg-slate-200" />
+                <div className={`h-8 w-[1px] transition-colors duration-500 ${theme === "dark" ? "bg-slate-800" : "bg-slate-200"}`} />
 
                 <div className="flex flex-col text-left">
                   <div className="flex items-baseline space-x-1.5">
-                    <span className="text-lg font-black text-[#F57C1F] tracking-tight">{totalReportsCount}</span>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Reports</span>
+                    <span className="text-lg font-black text-[#F57C1F] dark:text-[#fbbf24] tracking-tight">{totalReportsCount}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Reports</span>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* FLOATING SAFETY HEATMAP RISK LEGEND CARD */}
+            {heatmapType !== "none" && (
+              <div className="absolute top-4 right-3 z-30 pointer-events-auto flex flex-col items-end space-y-2 max-w-[280px]">
+                <div className="bg-white/95 dark:bg-[#131b2d]/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800/80 p-3 rounded-2xl shadow-xl flex flex-col text-left w-full">
+                  <div className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 border-b border-slate-100 dark:border-slate-800/80 pb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1">🛡️ Zone Threat Density</span>
+                    <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 uppercase tracking-widest font-black">
+                      {heatmapType === "streetlight" ? "Lighting" : heatmapType === "womensafety" ? "Safety" : "Combined"}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-[#EF4444] border border-red-600 shadow-sm" />
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">🔴 High Risk (5+ Active Reports)</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-[#F59E0B] border border-amber-600 shadow-sm" />
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">🟡 Moderate (2-4 Reports)</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-[#3B82F6] border border-blue-600 shadow-sm" />
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">🔵 Minor Hazards (1 Report)</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-[#10B981] border border-emerald-600 shadow-sm" />
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">🟢 Secured / Safe (0 Reports)</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-[8px] text-slate-400 dark:text-slate-500 font-semibold leading-normal">
+                    ℹ️ Click on sector polygons to inspect detailed reports.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* RENDER VIEWPORT */}
             {viewMode === "real" && hasValidKey ? (
@@ -1627,29 +1991,50 @@ export default function MapsView({
                     internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
                     gestureHandling="greedy"
                     disableDefaultUI={true}
-                    styles={LIGHT_MAP_STYLE}
+                    styles={isMapDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE}
+                    colorScheme={isMapDark ? "DARK" : "LIGHT"}
                   >
-                    {/* Render standard ward boundaries if zoom <= 13 */}
-                    <GoogleMapsSectorsOutline preset={currentPreset} mapZoom={mapZoom} />
+                    {/* Render standard ward boundaries if zoom <= 13 and in analytical mode */}
+                    {displayMode === "analytical" && heatmapType === "none" && (
+                      <GoogleMapsSectorsOutline preset={currentPreset} mapZoom={mapZoom} />
+                    )}
 
-                    {/* Rendering the cluster nodes exactly matching screenshot positions */}
+                    {heatmapType !== "none" && (
+                      <GoogleMapsSafetyHeatmap 
+                        preset={currentPreset} 
+                        heatmapType={heatmapType} 
+                        issues={issues} 
+                      />
+                    )}
+
+                    {/* Rendering the cluster nodes with dynamic contents */}
                     {currentClusters.map((cluster) => (
                       <AdvancedMarker 
                         key={cluster.id} 
                         position={{ lat: cluster.lat, lng: cluster.lng }}
                         onClick={() => setSelectedCluster(cluster)}
                       >
-                        <div 
-                          style={{
-                            width: `${cluster.size}px`,
-                            height: `${cluster.size}px`
-                          }}
-                          className={`${getClusterColorClass(cluster.color)} border-2 border-white shadow-xl rounded-full flex items-center justify-center font-extrabold text-xs cursor-pointer transform hover:scale-110 active:scale-95 transition-all duration-150`}
-                        >
-                          {cluster.label}
-                        </div>
+                        {getClusterBubbleContent(cluster, displayMode)}
                       </AdvancedMarker>
                     ))}
+
+                    {/* Rendering user's current location as a glowing pulsing blue dot */}
+                    {userCoords && (
+                      <AdvancedMarker 
+                        position={{ lat: userCoords.lat, lng: userCoords.lng }}
+                        zIndex={999}
+                      >
+                        <div className="relative flex h-6 w-6 items-center justify-center pointer-events-none">
+                          {/* Pulsing ring */}
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          {/* Inner glow */}
+                          <span className="absolute inline-flex rounded-full h-4 w-4 bg-blue-500 opacity-30"></span>
+                          {/* Solid inner blue circle with white border */}
+                          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600 border-2 border-white shadow-md"></span>
+                        </div>
+                      </AdvancedMarker>
+                    )}
+
 
 
 
@@ -1667,9 +2052,9 @@ export default function MapsView({
                 onTouchStart={handleVectorTouchStart}
                 onTouchMove={handleVectorTouchMove}
                 onTouchEnd={handleVectorMouseUp}
-                className={`w-full h-full flex items-center justify-center relative cursor-grab bg-[#FAF2EB] select-none ${
-                  isVectorDragging ? "cursor-grabbing" : ""
-                }`}
+                className={`w-full h-full flex items-center justify-center relative cursor-grab select-none transition-colors duration-500 ${
+                  isMapDark ? "bg-[#0d1321]" : "bg-[#FAF2EB]"
+                } ${isVectorDragging ? "cursor-grabbing" : ""}`}
               >
                 {/* SVG Transform Container */}
                 <div 
@@ -1685,20 +2070,35 @@ export default function MapsView({
                       </pattern>
                     </defs>
 
-                    {/* Background Soft Cream Base Grid */}
-                    <rect width="1000" height="1000" fill="#FCF6F0" />
+                    {/* Background Soft Cream Base Grid / Dark Space Grid */}
+                    <rect 
+                      width="1000" 
+                      height="1000" 
+                      fill={isMapDark ? "#0d1321" : "#FCF6F0"} 
+                      className="transition-colors duration-500"
+                    />
 
                     {/* WATER BODIES (e.g. Halasuru Lake or coastal outlines) */}
                     <path 
                       d="M 500,450 Q 560,420 620,480 T 700,430 L 750,550 Q 640,600 520,550 Z" 
-                      fill="#E2EDF5" 
-                      stroke="#C1D9EB" 
+                      fill={isMapDark ? "#030712" : "#E2EDF5"} 
+                      stroke={isMapDark ? "#111827" : "#C1D9EB"} 
                       strokeWidth="2" 
+                      className="transition-colors duration-500"
                     />
-                    <text x="590" y="510" fill="#71A0C2" fontSize="10" fontWeight="bold" className="font-sans italic">Lake Sanctuary</text>
+                    <text 
+                      x="590" 
+                      y="510" 
+                      fill={isMapDark ? "#475569" : "#71A0C2"} 
+                      fontSize="10" 
+                      fontWeight="bold" 
+                      className="font-sans italic transition-colors duration-500"
+                    >
+                      Lake Sanctuary
+                    </text>
 
-                    {/* MULTIPLE SECTOR/WARD BOUNDARY OUTLINES (Styled exactly like the red dashed borders in screenshots) */}
-                    {Object.entries(currentPreset.sectorsOutlines).map(([secKey, points]) => {
+                    {/* MULTIPLE SECTOR/WARD BOUNDARY OUTLINES (Only in analytical mode to prevent report clutter) */}
+                    {displayMode === "analytical" && heatmapType === "none" && Object.entries(currentPreset.sectorsOutlines).map(([secKey, points]) => {
                       // Project coordinates to 1000x1000 box centered on (500,500)
                       const pointsStr = (points as { lat: number; lng: number }[]).map(p => {
                         const px = 500 + (p.lng - currentPreset.center.lng) * 4000;
@@ -1719,68 +2119,231 @@ export default function MapsView({
                       );
                     })}
 
-                    {/* ROAD NETWORK LINES (White roads with slight beige borders) */}
+                    {/* HEATMAP SECTOR/ZONE COLOR OVERLAYS FOR FALLBACK VECTOR MAP */}
+                    {heatmapType !== "none" && Object.entries(currentPreset.sectorsOutlines).map(([secKey, points]) => {
+                      const pointsStr = (points as { lat: number; lng: number }[]).map(p => {
+                        const px = 500 + (p.lng - currentPreset.center.lng) * 4000;
+                        const py = 500 - (p.lat - currentPreset.center.lat) * 4000;
+                        return `${px},${py}`;
+                      }).join(" ");
+
+                      // Find issues belonging to this sector
+                      const sectorIssues = issues.filter(issue => {
+                        const lat = Number(issue.latitude);
+                        const lng = Number(issue.longitude);
+                        if (isNaN(lat) || isNaN(lng)) return false;
+                        return isPointInPolygon(lat, lng, points as { lat: number; lng: number }[]);
+                      });
+
+                      // Filter issues based on heatmapType
+                      let relevantIssues = [...sectorIssues];
+                      if (heatmapType === "streetlight") {
+                        relevantIssues = relevantIssues.filter(iss => {
+                          const cat = (iss.category || "").toLowerCase();
+                          return cat.includes("light") || cat.includes("electricity") || cat.includes("power") || cat.includes("streetlight");
+                        });
+                      } else if (heatmapType === "womensafety") {
+                        relevantIssues = relevantIssues.filter(iss => isWomenUnsafe(iss));
+                      } else if (heatmapType === "overall") {
+                        relevantIssues = relevantIssues.filter(iss => {
+                          const cat = (iss.category || "").toLowerCase();
+                          const isLight = cat.includes("light") || cat.includes("electricity") || cat.includes("power") || cat.includes("streetlight");
+                          return isLight || isWomenUnsafe(iss);
+                        });
+                      }
+
+                      // Count unresolved issues
+                      const unresolvedCount = relevantIssues.filter(iss => iss.status !== "RESOLVED").length;
+
+                      // Determine color and opacity based on risk
+                      let fillColor = "rgba(16, 185, 129, 0.25)"; // Green
+                      let strokeColor = "#10B981";
+                      let riskLabel = "Low Risk";
+
+                      if (unresolvedCount >= 5) {
+                        fillColor = "rgba(239, 68, 68, 0.45)"; // Red
+                        strokeColor = "#EF4444";
+                        riskLabel = "High Risk";
+                      } else if (unresolvedCount >= 2) {
+                        fillColor = "rgba(245, 158, 11, 0.35)"; // Orange/Yellow
+                        strokeColor = "#F59E0B";
+                        riskLabel = "Medium Risk";
+                      } else if (unresolvedCount >= 1) {
+                        fillColor = "rgba(59, 130, 246, 0.25)"; // Blue
+                        strokeColor = "#3B82F6";
+                        riskLabel = "Minor Hazards";
+                      }
+
+                      const sectorName = currentPreset.sectors[secKey]?.name || secKey;
+
+                      return (
+                        <g key={`vector-heatmap-${secKey}`} className="cursor-pointer">
+                          <polygon 
+                            points={pointsStr}
+                            fill={fillColor}
+                            stroke={strokeColor}
+                            strokeWidth="2.5"
+                            className="transition-all duration-300 hover:fill-opacity-60"
+                            onClick={() => {
+                              setSelectedCluster({
+                                id: `heatmap-sec-${secKey}`,
+                                label: `${unresolvedCount}`,
+                                lat: points[0].lat,
+                                lng: points[0].lng,
+                                x: 500,
+                                y: 500,
+                                size: 50,
+                                color: unresolvedCount >= 5 ? "red" : unresolvedCount >= 2 ? "orange" : "burgundy",
+                                locality: sectorName,
+                                recentIssue: `Zone safety risk: ${unresolvedCount} active reports.`,
+                                issues: relevantIssues
+                              });
+                            }}
+                          />
+                          <title>{`${sectorName}: ${riskLabel} (${unresolvedCount} Active Reports)`}</title>
+                        </g>
+                      );
+                    })}
+
+                    {/* ROAD NETWORK LINES (White roads in light mode, deep gray in dark streetlight mode) */}
                     <g opacity="0.8">
                       {/* Main Highway 1 */}
-                      <line x1="100" y1="350" x2="900" y2="350" stroke="#FAF2EB" strokeWidth="16" strokeLinecap="round" />
-                      <line x1="100" y1="350" x2="900" y2="350" stroke="#FFFFFF" strokeWidth="12" strokeLinecap="round" />
+                      <line 
+                        x1="100" y1="350" x2="900" y2="350" 
+                        stroke={isMapDark ? "#111827" : "#FAF2EB"} 
+                        strokeWidth="16" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
+                      <line 
+                        x1="100" y1="350" x2="900" y2="350" 
+                        stroke={isMapDark ? "#1f2937" : "#FFFFFF"} 
+                        strokeWidth="12" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
                       
                       {/* Diagonal Ring Road */}
-                      <line x1="200" y1="150" x2="800" y2="750" stroke="#FAF2EB" strokeWidth="14" strokeLinecap="round" />
-                      <line x1="200" y1="150" x2="800" y2="750" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" />
+                      <line 
+                        x1="200" y1="150" x2="800" y2="750" 
+                        stroke={isMapDark ? "#111827" : "#FAF2EB"} 
+                        strokeWidth="14" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
+                      <line 
+                        x1="200" y1="150" x2="800" y2="750" 
+                        stroke={isMapDark ? "#1f2937" : "#FFFFFF"} 
+                        strokeWidth="10" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
 
                       {/* Secondary Radial Roads */}
-                      <line x1="480" y1="100" x2="480" y2="900" stroke="#FAF2EB" strokeWidth="12" strokeLinecap="round" />
-                      <line x1="480" y1="100" x2="480" y2="900" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" />
+                      <line 
+                        x1="480" y1="100" x2="480" y2="900" 
+                        stroke={isMapDark ? "#111827" : "#FAF2EB"} 
+                        strokeWidth="12" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
+                      <line 
+                        x1="480" y1="100" x2="480" y2="900" 
+                        stroke={isMapDark ? "#1f2937" : "#FFFFFF"} 
+                        strokeWidth="8" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
 
-                      <line x1="100" y1="650" x2="900" y2="650" stroke="#FAF2EB" strokeWidth="12" strokeLinecap="round" />
-                      <line x1="100" y1="650" x2="900" y2="650" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" />
+                      <line 
+                        x1="100" y1="650" x2="900" y2="650" 
+                        stroke={isMapDark ? "#111827" : "#FAF2EB"} 
+                        strokeWidth="12" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
+                      <line 
+                        x1="100" y1="650" x2="900" y2="650" 
+                        stroke={isMapDark ? "#1f2937" : "#FFFFFF"} 
+                        strokeWidth="8" strokeLinecap="round" 
+                        className="transition-colors duration-500"
+                      />
                     </g>
 
-                    {/* CITY DISTRICT LABELS IN BURGUNDY (Zoom dependent) */}
-                    <g fill="#7C1A22" fontWeight="bold" fontSize="11" letterSpacing="1.5">
+                    {/* CITY DISTRICT LABELS (Adaptive color based on dark mode) */}
+                    <g 
+                      fill={isMapDark ? "#64748b" : "#7C1A22"} 
+                      fontWeight="bold" fontSize="11" letterSpacing="1.5"
+                      className="transition-colors duration-500"
+                    >
                       <text x="250" y="280" textAnchor="middle">SADASHIVANAGAR</text>
                       <text x="180" y="440" textAnchor="middle">MALLESHWARAM</text>
-                      <text x="500" y="380" textAnchor="middle" fontSize="16" fontWeight="900" fill="#801D26">{currentPreset.name.toUpperCase()}</text>
+                      <text 
+                        x="500" y="380" textAnchor="middle" fontSize="16" fontWeight="900" 
+                        fill={isMapDark ? "#f59e0b" : "#801D26"}
+                        className="transition-colors duration-500"
+                      >
+                        {currentPreset.name.toUpperCase()}
+                      </text>
                       <text x="730" y="480" textAnchor="middle">SHIVAJINAGAR</text>
                       <text x="800" y="610" textAnchor="middle">INDIRANAGAR</text>
                       <text x="320" y="780" textAnchor="middle">JAYANAGAR</text>
                     </g>
 
-                    {/* RENDER FALLBACK CLUSTERS ON THE VECTOR CANVAS */}
+                    {/* RENDER FALLBACK CLUSTERS ON THE VECTOR CANVAS WITH CUSTOM REACT BUBBLE ICONS */}
                     {currentClusters.map((cluster) => {
-                      const size = cluster.size * 1.1;
                       return (
                         <g 
                           key={cluster.id} 
                           className="cursor-pointer pointer-events-auto transform hover:scale-110 transition-all duration-200"
                           onClick={() => setSelectedCluster(cluster)}
                         >
-                          {/* Inner Circle Marker */}
-                          <circle 
-                            cx={cluster.x} 
-                            cy={cluster.y} 
-                            r={size / 2} 
-                            fill={cluster.color === "burgundy" ? "#801D26" : cluster.color === "red" ? "#E13838" : "#F57C1F"} 
-                            stroke="#FFFFFF" 
-                            strokeWidth="2.5" 
-                            className="shadow-xl"
-                          />
-                          {/* Label Count */}
-                          <text 
-                            x={cluster.x} 
-                            y={cluster.y + 4} 
-                            textAnchor="middle" 
-                            fill="#FFFFFF" 
-                            fontSize="11.5" 
-                            fontWeight="900"
-                            fontFamily="sans-serif"
+                          <foreignObject
+                            x={cluster.x - 40}
+                            y={cluster.y - 40}
+                            width="80"
+                            height="80"
+                            className="overflow-visible"
                           >
-                            {cluster.label}
-                          </text>
+                            <div className="w-full h-full flex items-center justify-center">
+                              {getClusterBubbleContent(cluster, displayMode)}
+                            </div>
+                          </foreignObject>
                         </g>
                       );
                     })}
+
+                    {/* Rendering user's current location on vector canvas */}
+                    {userCoords && (
+                      (() => {
+                        const userPx = 500 + (userCoords.lng - currentPreset.center.lng) * 4000;
+                        const userPy = 500 - (userCoords.lat - currentPreset.center.lat) * 4000;
+                        return (
+                          <g className="pointer-events-none">
+                            {/* Outer pulsing ring in SVG */}
+                            <circle
+                              cx={userPx}
+                              cy={userPy}
+                              r="15"
+                              fill="#3b82f6"
+                              fillOpacity="0.35"
+                              className="animate-pulse"
+                            />
+                            {/* Middle glow */}
+                            <circle
+                              cx={userPx}
+                              cy={userPy}
+                              r="8"
+                              fill="#2563eb"
+                              fillOpacity="0.5"
+                            />
+                            {/* Inner white-bordered blue dot */}
+                            <circle
+                              cx={userPx}
+                              cy={userPy}
+                              r="4"
+                              fill="#3b82f6"
+                              stroke="#ffffff"
+                              strokeWidth="1.5"
+                            />
+                          </g>
+                        );
+                      })()
+                    )}
+
 
 
 
@@ -1791,23 +2354,138 @@ export default function MapsView({
                 <div className="absolute bottom-28 right-3.5 z-30 flex flex-col space-y-1.5 pointer-events-auto">
                   <button
                     onClick={() => setVectorZoomLevel(prev => Math.min(prev + 1, 5))}
-                    className="h-10 w-10 bg-white border border-slate-200 rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-slate-900 cursor-pointer active:scale-95 transition-all"
+                    className="h-10 w-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer active:scale-95 transition-all"
                   >
                     <Plus className="h-4.5 w-4.5 font-bold" />
                   </button>
                   <button
                     onClick={() => setVectorZoomLevel(prev => Math.max(prev - 1, 1))}
-                    className="h-10 w-10 bg-white border border-slate-200 rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-slate-900 cursor-pointer active:scale-95 transition-all"
+                    className="h-10 w-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer active:scale-95 transition-all"
                   >
                     <Minus className="h-4.5 w-4.5 font-bold" />
                   </button>
+
+                  {/* COLLAPSIBLE HEATMAP CONTROL */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsHeatmapMenuOpen(!isHeatmapMenuOpen)}
+                      className={`h-10 w-10 border rounded-xl shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200 ${
+                        isHeatmapMenuOpen || heatmapType !== "none"
+                          ? "bg-[#801D26] border-[#801D26] text-white shadow-md shadow-rose-950/20"
+                          : "bg-white dark:bg-[#131b2d] border-slate-200 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Toggle Safety Heatmap Layer"
+                    >
+                      {heatmapType === "none" ? (
+                        <Layers className="h-4.5 w-4.5" />
+                      ) : heatmapType === "streetlight" ? (
+                        <Lightbulb className="h-4.5 w-4.5 text-amber-300 fill-amber-300/25" />
+                      ) : heatmapType === "womensafety" ? (
+                        <ShieldAlert className="h-4.5 w-4.5 text-rose-300" />
+                      ) : (
+                        <AlertTriangle className="h-4.5 w-4.5 text-indigo-300" />
+                      )}
+                    </button>
+
+                    <AnimatePresence>
+                      {isHeatmapMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 20, scale: 0.95 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          exit={{ opacity: 0, x: 20, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-[52px] bottom-0 z-40 bg-white/95 dark:bg-[#131b2d]/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800/80 p-1.5 rounded-2xl shadow-2xl flex items-center space-x-1.5 min-w-[310px]"
+                        >
+                          <div className="flex items-center space-x-1 px-1.5 py-0.5 border-r border-slate-100 dark:border-slate-800/80 shrink-0">
+                            <Sparkles className="h-3.5 w-3.5 text-rose-500 fill-rose-100 dark:fill-rose-950/30" />
+                            <span className="text-[9px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">Safety Layer</span>
+                          </div>
+
+                          <div className="flex items-center space-x-1 flex-1 justify-end">
+                            <button
+                              onClick={() => {
+                                setHeatmapType("none");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-0.5 transition-all cursor-pointer border ${
+                                heatmapType === "none"
+                                  ? theme === "dark"
+                                    ? "bg-slate-100 text-slate-900 shadow-sm border-transparent"
+                                    : "bg-slate-950 text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-white hover:bg-slate-800/80 border-transparent"
+                                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-transparent"
+                              }`}
+                            >
+                              <span>Off</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setHeatmapType("streetlight");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-1 transition-all cursor-pointer border ${
+                                heatmapType === "streetlight"
+                                  ? "bg-amber-500 text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-amber-400 hover:bg-amber-950/40 border-transparent"
+                                    : "text-slate-600 hover:text-amber-600 hover:bg-amber-50/50 border-transparent"
+                              }`}
+                            >
+                              <Lightbulb className="h-2.5 w-2.5" />
+                              <span>Lighting</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setHeatmapType("womensafety");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-1 transition-all cursor-pointer border ${
+                                heatmapType === "womensafety"
+                                  ? "bg-[#DC2626] text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-[#DC2626] hover:bg-rose-950/40 border-transparent"
+                                    : "text-slate-600 hover:text-[#DC2626] hover:bg-rose-50/50 border-transparent"
+                              }`}
+                            >
+                              <ShieldAlert className="h-2.5 w-2.5" />
+                              <span>Safety</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setHeatmapType("overall");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-1 transition-all cursor-pointer border ${
+                                heatmapType === "overall"
+                                  ? "bg-indigo-600 text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-indigo-400 hover:bg-indigo-950/40 border-transparent"
+                                    : "text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50 border-transparent"
+                              }`}
+                            >
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              <span>Combined</span>
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
                 {/* LOCATE CURRENT POSITION HUD (COMPASS ICON) */}
                 <div className="absolute bottom-40 right-3.5 z-30 pointer-events-auto">
                   <button
                     onClick={handleLocateMe}
-                    className="h-10 w-10 bg-white border border-slate-200 rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-indigo-600 cursor-pointer active:scale-95 transition-all"
+                    className={`h-10 w-10 border rounded-xl shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all transition-colors duration-500 ${
+                      theme === "dark"
+                        ? "bg-slate-900 border-slate-800 text-slate-300 hover:text-white"
+                        : "bg-white border-slate-200 text-slate-700 hover:text-indigo-600"
+                    }`}
                   >
                     <Compass className="h-4.5 w-4.5" />
                   </button>
@@ -1822,16 +2500,127 @@ export default function MapsView({
                 <div className="absolute bottom-28 right-3.5 z-30 flex flex-col space-y-1.5 pointer-events-auto">
                   <button
                     onClick={() => setMapZoom(prev => Math.min(prev + 1, 18))}
-                    className="h-10 w-10 bg-white border border-slate-200 rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-slate-900 cursor-pointer"
+                    className="h-10 w-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer active:scale-95 transition-all"
                   >
                     <Plus className="h-4.5 w-4.5" />
                   </button>
                   <button
                     onClick={() => setMapZoom(prev => Math.max(prev - 1, 5))}
-                    className="h-10 w-10 bg-white border border-slate-200 rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-slate-900 cursor-pointer"
+                    className="h-10 w-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer active:scale-95 transition-all"
                   >
                     <Minus className="h-4.5 w-4.5" />
                   </button>
+
+                  {/* COLLAPSIBLE HEATMAP CONTROL */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsHeatmapMenuOpen(!isHeatmapMenuOpen)}
+                      className={`h-10 w-10 border rounded-xl shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200 ${
+                        isHeatmapMenuOpen || heatmapType !== "none"
+                          ? "bg-[#801D26] border-[#801D26] text-white shadow-md shadow-rose-950/20"
+                          : "bg-white dark:bg-[#131b2d] border-slate-200 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Toggle Safety Heatmap Layer"
+                    >
+                      {heatmapType === "none" ? (
+                        <Layers className="h-4.5 w-4.5" />
+                      ) : heatmapType === "streetlight" ? (
+                        <Lightbulb className="h-4.5 w-4.5 text-amber-300 fill-amber-300/25 animate-pulse" />
+                      ) : heatmapType === "womensafety" ? (
+                        <ShieldAlert className="h-4.5 w-4.5 text-rose-300" />
+                      ) : (
+                        <AlertTriangle className="h-4.5 w-4.5 text-indigo-300" />
+                      )}
+                    </button>
+
+                    <AnimatePresence>
+                      {isHeatmapMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 20, scale: 0.95 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          exit={{ opacity: 0, x: 20, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-[52px] bottom-0 z-40 bg-white/95 dark:bg-[#131b2d]/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800/80 p-1.5 rounded-2xl shadow-2xl flex items-center space-x-1.5 min-w-[310px]"
+                        >
+                          <div className="flex items-center space-x-1 px-1.5 py-0.5 border-r border-slate-100 dark:border-slate-800/80 shrink-0">
+                            <Sparkles className="h-3.5 w-3.5 text-rose-500 fill-rose-100 dark:fill-rose-950/30" />
+                            <span className="text-[9px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">Safety Layer</span>
+                          </div>
+
+                          <div className="flex items-center space-x-1 flex-1 justify-end">
+                            <button
+                              onClick={() => {
+                                setHeatmapType("none");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-0.5 transition-all cursor-pointer border ${
+                                heatmapType === "none"
+                                  ? theme === "dark"
+                                    ? "bg-slate-100 text-slate-900 shadow-sm border-transparent"
+                                    : "bg-slate-950 text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-white hover:bg-slate-800/80 border-transparent"
+                                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-transparent"
+                              }`}
+                            >
+                              <span>Off</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setHeatmapType("streetlight");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-1 transition-all cursor-pointer border ${
+                                heatmapType === "streetlight"
+                                  ? "bg-amber-500 text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-amber-400 hover:bg-amber-950/40 border-transparent"
+                                    : "text-slate-600 hover:text-amber-600 hover:bg-amber-50/50 border-transparent"
+                              }`}
+                            >
+                              <Lightbulb className="h-2.5 w-2.5" />
+                              <span>Lighting</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setHeatmapType("womensafety");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-1 transition-all cursor-pointer border ${
+                                heatmapType === "womensafety"
+                                  ? "bg-[#DC2626] text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-[#DC2626] hover:bg-rose-950/40 border-transparent"
+                                    : "text-slate-600 hover:text-[#DC2626] hover:bg-rose-50/50 border-transparent"
+                              }`}
+                            >
+                              <ShieldAlert className="h-2.5 w-2.5" />
+                              <span>Safety</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setHeatmapType("overall");
+                                setIsHeatmapMenuOpen(false);
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center space-x-1 transition-all cursor-pointer border ${
+                                heatmapType === "overall"
+                                  ? "bg-indigo-600 text-white shadow-sm border-transparent"
+                                  : theme === "dark"
+                                    ? "text-slate-300 hover:text-indigo-400 hover:bg-indigo-950/40 border-transparent"
+                                    : "text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50 border-transparent"
+                              }`}
+                            >
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              <span>Combined</span>
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
                 <div className="absolute bottom-40 right-3.5 z-30 pointer-events-auto">
@@ -2348,13 +3137,21 @@ export default function MapsView({
 
             {/* 3.5 FLOATING CATEGORY SELECTOR ON BOTTOM LEFT OF MAP */}
             {!selectedCluster && (
-              <div className="absolute bottom-4 left-3.5 z-30 pointer-events-auto flex items-center space-x-1 bg-white/95 backdrop-blur-md border border-slate-200/80 p-1 rounded-2xl shadow-lg max-w-[calc(100%-80px)] overflow-x-auto scrollbar-none">
+              <div className={`absolute bottom-4 left-3.5 z-30 pointer-events-auto flex items-center space-x-1 backdrop-blur-md border p-1 rounded-2xl shadow-lg max-w-[calc(100%-80px)] overflow-x-auto scrollbar-none transition-colors duration-500 ${
+                theme === "dark"
+                  ? "bg-[#131b2d]/95 border-slate-800/80"
+                  : "bg-white/95 border-slate-200/80"
+              }`}>
                 <button
                   onClick={() => setCategoryFilter("all")}
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-150 cursor-pointer ${
                     categoryFilter === "all"
-                      ? "bg-slate-900 text-white shadow-sm"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      ? theme === "dark"
+                        ? "bg-slate-100 text-slate-950 shadow-sm"
+                        : "bg-slate-900 text-white shadow-sm"
+                      : theme === "dark"
+                        ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   }`}
                 >
                   <Layers className="h-3.5 w-3.5 shrink-0" />
@@ -2365,7 +3162,9 @@ export default function MapsView({
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-150 cursor-pointer ${
                     categoryFilter === "garbage"
                       ? "bg-[#D97706] text-white shadow-sm"
-                      : "text-slate-600 hover:text-[#D97706] hover:bg-amber-50/50"
+                      : theme === "dark"
+                        ? "text-slate-400 hover:text-[#fbbf24] hover:bg-amber-950/30"
+                        : "text-slate-600 hover:text-[#D97706] hover:bg-amber-50/50"
                   }`}
                 >
                   <Trash2 className="h-3.5 w-3.5 shrink-0" />
@@ -2376,7 +3175,9 @@ export default function MapsView({
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-150 cursor-pointer ${
                     categoryFilter === "streetlight"
                       ? "bg-[#2563EB] text-white shadow-sm"
-                      : "text-slate-600 hover:text-[#2563EB] hover:bg-blue-50/50"
+                      : theme === "dark"
+                        ? "text-slate-400 hover:text-[#60a5fa] hover:bg-blue-950/30"
+                        : "text-slate-600 hover:text-[#2563EB] hover:bg-blue-50/50"
                   }`}
                 >
                   <Lightbulb className="h-3.5 w-3.5 shrink-0" />
@@ -2387,7 +3188,9 @@ export default function MapsView({
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-150 cursor-pointer ${
                     categoryFilter === "water"
                       ? "bg-[#0891B2] text-white shadow-sm"
-                      : "text-slate-600 hover:text-[#0891B2] hover:bg-cyan-50/50"
+                      : theme === "dark"
+                        ? "text-slate-400 hover:text-[#22d3ee] hover:bg-cyan-950/30"
+                        : "text-slate-600 hover:text-[#0891B2] hover:bg-cyan-50/50"
                   }`}
                 >
                   <Droplet className="h-3.5 w-3.5 shrink-0" />
@@ -2398,7 +3201,9 @@ export default function MapsView({
                   className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 transition-all duration-150 cursor-pointer ${
                     categoryFilter === "assets"
                       ? "bg-[#DC2626] text-white shadow-sm"
-                      : "text-slate-600 hover:text-[#DC2626] hover:bg-rose-50/50"
+                      : theme === "dark"
+                        ? "text-slate-400 hover:text-[#f87171] hover:bg-rose-950/30"
+                        : "text-slate-600 hover:text-[#DC2626] hover:bg-rose-50/50"
                   }`}
                 >
                   <Wrench className="h-3.5 w-3.5 shrink-0" />
@@ -2411,19 +3216,25 @@ export default function MapsView({
         ) : (
           
           /* RENDER LIST VIEW: GORGEOUS FEED OF ISSUES IN THE CITY (Matches List mode toggle) */
-          <div className="w-full h-full bg-white overflow-y-auto px-4 py-4 space-y-3 flex flex-col text-left">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Active Civic Grievances ({listFeedItems.length})</h3>
+          <div className={`w-full h-full overflow-y-auto px-4 py-4 space-y-3 flex flex-col text-left transition-colors duration-500 ${
+            theme === "dark" ? "bg-[#0b0f19]" : "bg-white"
+          }`}>
+            <div className={`flex items-center justify-between border-b pb-2 ${
+              theme === "dark" ? "border-slate-800/80" : "border-slate-100"
+            }`}>
+              <h3 className={`text-xs font-black uppercase tracking-wider ${
+                theme === "dark" ? "text-slate-100" : "text-slate-900"
+              }`}>Active Civic Grievances ({listFeedItems.length})</h3>
               <p className="text-[10px] text-slate-400 font-semibold">{currentPreset.name}, {currentPreset.state}</p>
             </div>
 
             {listFeedItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-2">
-                <Filter className="h-10 w-10 text-slate-300" />
+                <Filter className="h-10 w-10 text-slate-300 dark:text-slate-700" />
                 <p className="text-xs font-bold">No active reports match the selected filters.</p>
                 <button 
                   onClick={() => { setSeverityFilter("all"); setStatusFilter("all"); setCategoryFilter("all"); }}
-                  className="text-xs font-extrabold text-indigo-500 hover:underline cursor-pointer"
+                  className="text-xs font-extrabold text-indigo-500 dark:text-indigo-400 hover:underline cursor-pointer"
                 >
                   Clear filters
                 </button>
@@ -2431,18 +3242,55 @@ export default function MapsView({
             ) : (
               <div className="space-y-3 flex-1">
                 {listFeedItems.map((item, index) => {
-                  const severityColors = ["text-blue-500", "text-blue-600 bg-blue-50", "text-emerald-600 bg-emerald-50", "text-amber-600 bg-amber-50", "text-orange-600 bg-orange-50", "text-rose-600 bg-rose-50"];
+                  const getSeverityBadgeClasses = (severity: number, isDark: boolean) => {
+                    const lightColors = [
+                      "text-blue-500 bg-blue-50", 
+                      "text-blue-600 bg-blue-50", 
+                      "text-emerald-600 bg-emerald-50", 
+                      "text-amber-600 bg-amber-50", 
+                      "text-orange-600 bg-orange-50", 
+                      "text-rose-600 bg-rose-50"
+                    ];
+                    const darkColors = [
+                      "text-blue-400 bg-blue-950/40 border border-blue-900/50", 
+                      "text-blue-400 bg-blue-950/40 border border-blue-900/50", 
+                      "text-emerald-400 bg-emerald-950/40 border border-emerald-900/50", 
+                      "text-amber-400 bg-amber-950/40 border border-amber-900/50", 
+                      "text-orange-400 bg-orange-950/40 border border-orange-900/50", 
+                      "text-rose-400 bg-rose-950/40 border border-rose-900/50"
+                    ];
+                    return isDark ? darkColors[severity] || "bg-slate-900 text-slate-400" : lightColors[severity] || "bg-slate-50 text-slate-600";
+                  };
+
+                  const getStatusBadgeClasses = (status: string, isDark: boolean) => {
+                    if (isDark) {
+                      if (status === "RESOLVED") return "bg-emerald-950/40 text-emerald-400 border border-emerald-900/50";
+                      if (status === "IN_PROGRESS") return "bg-sky-950/40 text-sky-400 border border-sky-900/50";
+                      return "bg-amber-950/40 text-amber-400 border border-amber-900/50";
+                    } else {
+                      if (status === "RESOLVED") return "bg-emerald-50 text-emerald-600";
+                      if (status === "IN_PROGRESS") return "bg-sky-50 text-sky-600";
+                      return "bg-amber-50 text-amber-600";
+                    }
+                  };
+
+                  const isDark = theme === "dark";
+
                   return (
                     <div 
                       key={item.id}
                       onClick={() => {
                         if (onSelectIssue) onSelectIssue(item);
                       }}
-                      className="border border-slate-150 rounded-xl p-3.5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex flex-col space-y-2 bg-white cursor-pointer"
+                      className={`border rounded-xl p-3.5 shadow-sm transition-all flex flex-col space-y-2 cursor-pointer duration-300 ${
+                        isDark 
+                          ? "border-slate-800/80 bg-[#131b2d]/80 hover:border-slate-700 hover:bg-[#131b2d] text-slate-200 hover:shadow-lg hover:shadow-black/10" 
+                          : "border-slate-150 bg-white hover:border-indigo-300 hover:shadow-md text-slate-800"
+                      }`}
                     >
                       <div className="flex justify-between items-start gap-2">
-                        <span className="text-xs font-extrabold text-slate-800 leading-snug">{item.title}</span>
-                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full whitespace-nowrap uppercase ${severityColors[item.severity] || "bg-slate-50 text-slate-600"}`}>
+                        <span className={`text-xs font-extrabold leading-snug ${isDark ? "text-slate-100" : "text-slate-800"}`}>{item.title}</span>
+                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full whitespace-nowrap uppercase ${getSeverityBadgeClasses(item.severity, isDark)}`}>
                           Sev {item.severity}
                         </span>
                       </div>
@@ -2456,15 +3304,9 @@ export default function MapsView({
                         <span>{item.timestamp}</span>
                       </div>
 
-                      <div className="flex justify-between items-center pt-1 border-t border-slate-50 text-[10px]">
-                        <span className="text-slate-400">Reporter: <b className="text-slate-700 font-semibold">{item.reporterName}</b></span>
-                        <span className={`font-black uppercase tracking-wide px-1.5 py-0.5 rounded text-[8px] ${
-                          item.status === "RESOLVED" 
-                            ? "bg-emerald-50 text-emerald-600" 
-                            : item.status === "IN_PROGRESS"
-                            ? "bg-sky-50 text-sky-600"
-                            : "bg-amber-50 text-amber-600"
-                        }`}>
+                      <div className={`flex justify-between items-center pt-1 border-t text-[10px] ${isDark ? "border-slate-800/60" : "border-slate-50"}`}>
+                        <span className="text-slate-400">Reporter: <b className={`font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>{item.reporterName}</b></span>
+                        <span className={`font-black uppercase tracking-wide px-1.5 py-0.5 rounded text-[8px] ${getStatusBadgeClasses(item.status, isDark)}`}>
                           {item.status.replace("_", " ")}
                         </span>
                       </div>
@@ -2481,11 +3323,19 @@ export default function MapsView({
 
       {/* 5. BOTTOM COMMAND & BAR (Dark-navy full action bar styled matching screenshots) */}
       {!isMobile && (
-        <div className="bg-white border-t border-slate-100 p-3 shrink-0 z-40 flex items-center justify-between gap-3 relative">
+        <div className={`p-3 shrink-0 z-40 flex items-center justify-between gap-3 relative border-t transition-colors duration-500 ${
+          theme === "dark"
+            ? "bg-[#0f172a] border-slate-800"
+            : "bg-white border-slate-100"
+        }`}>
           {/* Large Dark Navy Scan Button */}
           <button
             onClick={() => setIsQRModalOpen(true)}
-            className="flex-1 bg-[#0F172A] hover:bg-[#1E293B] active:scale-98 text-white py-3 px-5 rounded-2xl font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2.5 transition-all shadow-md cursor-pointer"
+            className={`flex-1 active:scale-98 text-white py-3 px-5 rounded-2xl font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2.5 transition-all shadow-md cursor-pointer border-none ${
+              theme === "dark"
+                ? "bg-indigo-600 hover:bg-indigo-700"
+                : "bg-[#0F172A] hover:bg-[#1E293B]"
+            }`}
           >
             <QrCode className="h-4.5 w-4.5" />
             <span>Scan QR to Report</span>
@@ -2496,10 +3346,14 @@ export default function MapsView({
             onClick={() => {
               setActiveTab(prev => prev === "list" ? "map" : "list");
             }}
-            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 p-2 rounded-2xl flex flex-col items-center justify-center h-[46px] w-[50px] shrink-0 transition-all shadow-sm cursor-pointer"
+            className={`p-2 rounded-2xl flex flex-col items-center justify-center h-[46px] w-[50px] shrink-0 transition-all shadow-sm cursor-pointer border ${
+              theme === "dark"
+                ? "bg-[#1e293b] border-slate-700 text-slate-100 hover:bg-[#2e3b4e]"
+                : "bg-white border-slate-200 text-slate-800 hover:bg-slate-50"
+            }`}
           >
-            <BarChart2 className="h-4 w-4 text-slate-600" />
-            <span className="text-[8px] font-black text-slate-500 font-mono mt-0.5">{activeCount}</span>
+            <BarChart2 className={`h-4 w-4 ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`} />
+            <span className={`text-[8px] font-black font-mono mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{activeCount}</span>
           </button>
         </div>
       )}
@@ -2606,6 +3460,130 @@ function GoogleMapsSectorsOutline({
       polygons.forEach(p => p.setMap(null));
     };
   }, [map, visible, preset]);
+
+  return null;
+}
+
+interface GoogleMapsSafetyHeatmapProps {
+  preset: CityPreset;
+  heatmapType: "none" | "streetlight" | "womensafety" | "overall";
+  issues: Issue[];
+}
+
+function GoogleMapsSafetyHeatmap({ 
+  preset, 
+  heatmapType,
+  issues
+}: GoogleMapsSafetyHeatmapProps) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || heatmapType === "none" || typeof google === "undefined") return;
+
+    const polygons = Object.entries(preset.sectorsOutlines).map(([secId, path]) => {
+      // 1. Find issues belonging to this sector
+      const sectorIssues = issues.filter(issue => {
+        const lat = Number(issue.latitude);
+        const lng = Number(issue.longitude);
+        if (isNaN(lat) || isNaN(lng)) return false;
+        return isPointInPolygon(lat, lng, path);
+      });
+
+      // 2. Filter issues based on heatmapType
+      let relevantIssues = [...sectorIssues];
+      if (heatmapType === "streetlight") {
+        relevantIssues = relevantIssues.filter(iss => {
+          const cat = (iss.category || "").toLowerCase();
+          return cat.includes("light") || cat.includes("electricity") || cat.includes("power") || cat.includes("streetlight");
+        });
+      } else if (heatmapType === "womensafety") {
+        relevantIssues = relevantIssues.filter(iss => isWomenUnsafe(iss));
+      } else if (heatmapType === "overall") {
+        relevantIssues = relevantIssues.filter(iss => {
+          const cat = (iss.category || "").toLowerCase();
+          const isLight = cat.includes("light") || cat.includes("electricity") || cat.includes("power") || cat.includes("streetlight");
+          return isLight || isWomenUnsafe(iss);
+        });
+      }
+
+      // 3. Count unresolved issues
+      const unresolvedCount = relevantIssues.filter(iss => iss.status !== "RESOLVED").length;
+
+      // 4. Determine color and opacity based on risk
+      let fillColor = "#10B981"; // Green (Safe)
+      let fillOpacity = 0.25;
+      let strokeColor = "#059669";
+      let riskLevel = "Low Risk / Secured";
+
+      if (unresolvedCount >= 5) {
+        fillColor = "#EF4444"; // Red (High Risk)
+        fillOpacity = 0.45;
+        strokeColor = "#DC2626";
+        riskLevel = "High Risk / Danger";
+      } else if (unresolvedCount >= 2) {
+        fillColor = "#F59E0B"; // Orange/Yellow (Medium Risk)
+        fillOpacity = 0.35;
+        strokeColor = "#D97706";
+        riskLevel = "Moderate Risk / Caution";
+      } else if (unresolvedCount >= 1) {
+        fillColor = "#3B82F6"; // Blue/Amber (Low-Medium Risk or Caution)
+        fillOpacity = 0.25;
+        strokeColor = "#2563EB";
+        riskLevel = "Minor Hazards / Alert";
+      }
+
+      const poly = new google.maps.Polygon({
+        paths: path,
+        map,
+        strokeColor,
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor,
+        fillOpacity,
+      });
+
+      const sectorName = preset.sectors[secId]?.name || secId;
+
+      const infoWindow = new google.maps.InfoWindow({
+        content: `
+          <div style="padding: 10px; font-family: system-ui, -apple-system, sans-serif; color: #1e293b; min-width: 200px;">
+            <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: 800; text-transform: uppercase; color: #0f172a; letter-spacing: 0.05em;">
+              ${sectorName}
+            </h4>
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${fillColor};"></span>
+              <span style="font-size: 10px; font-weight: 800; color: ${strokeColor}; text-transform: uppercase; letter-spacing: 0.02em;">
+                ${riskLevel}
+              </span>
+            </div>
+            <div style="font-size: 11px; color: #475569; border-top: 1px solid #f1f5f9; padding-top: 6px; margin-top: 4px;">
+              Active reports inside zone: <b>${unresolvedCount}</b>
+            </div>
+            <p style="margin: 4px 0 0 0; font-size: 10px; color: #94a3b8; line-height: 1.4;">
+              ${
+                heatmapType === "streetlight"
+                  ? "💡 Tracks street lamp failures and dark patches."
+                  : heatmapType === "womensafety"
+                  ? "🛡️ Tracks eve-teasing, harassment & unsafe alleys."
+                  : "🔥 Combined real-time civic & safety threats."
+              }
+            </p>
+          </div>
+        `,
+      });
+
+      google.maps.event.addListener(poly, "click", (event: any) => {
+        infoWindow.setPosition(event.latLng);
+        infoWindow.open(map);
+      });
+
+      return poly;
+    });
+
+    return () => {
+      polygons.forEach(p => p.setMap(null));
+    };
+  }, [map, preset, heatmapType, issues]);
 
   return null;
 }

@@ -3,8 +3,274 @@
 html, body, #root {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   -webkit-overflow-scrolling: touch;
 }
+
+/* 
+ * Butter-smooth global transition for theme switching.
+ * Animates colors, backgrounds, and borders.
+ */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition: background-color 500ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 500ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 500ms cubic-bezier(0.4, 0, 0.2, 1),
+              fill 500ms cubic-bezier(0.4, 0, 0.2, 1),
+              stroke 500ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 500ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* 
+ * Highly polished dark mode theme overrides.
+ * This ensures all components style perfectly without changing thousands of lines.
+ */
+.dark {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+}
+
+/* Deep container & canvas overrides */
+.dark .bg-slate-50,
+.dark .bg-slate-100/40,
+.dark .bg-slate-50/50,
+.dark .bg-slate-50/80,
+.dark .bg-slate-50/90,
+.dark .bg-gray-50,
+.dark .bg-zinc-50 {
+  background-color: #0b0f19 !important;
+}
+
+/* Card & modal overrides - Exclude buttons and links */
+.dark :not(button):not(a):not(.btn).bg-white,
+.dark :not(button):not(a):not(.btn).bg-slate-100,
+.dark :not(button):not(a):not(.btn).bg-gray-100,
+.dark :not(button):not(a):not(.btn).bg-zinc-100,
+.dark :not(button):not(a):not(.btn).bg-white/90,
+.dark :not(button):not(a):not(.btn).bg-white/80 {
+  background-color: #131b2d !important;
+}
+
+/* Accent & highlighted section overrides */
+.dark .bg-indigo-50 {
+  background-color: rgba(79, 70, 229, 0.15) !important;
+}
+.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+.dark .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.15) !important;
+}
+.dark .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+}
+
+/* Border overrides - Exclude buttons and links to preserve their clean, original borders */
+.dark :not(button):not(a):not(.btn).border-slate-200,
+.dark :not(button):not(a):not(.btn).border-slate-100,
+.dark :not(button):not(a):not(.btn).border-gray-200,
+.dark :not(button):not(a):not(.btn).border-zinc-200 {
+  border-color: #202c46 !important;
+}
+.dark :not(button):not(a):not(.btn).border-slate-300 {
+  border-color: #334155 !important;
+}
+.dark :not(button):not(a):not(.btn).border-[#cbe2d3] {
+  border-color: #1e293b !important;
+}
+.dark :not(button):not(a):not(.btn).border-indigo-200,
+.dark :not(button):not(a):not(.btn).border-indigo-100 {
+  border-color: rgba(99, 102, 241, 0.25) !important;
+}
+.dark :not(button):not(a):not(.btn).border-emerald-200,
+.dark :not(button):not(a):not(.btn).border-emerald-100 {
+  border-color: rgba(52, 211, 153, 0.25) !important;
+}
+.dark :not(button):not(a):not(.btn).border-rose-200,
+.dark :not(button):not(a):not(.btn).border-rose-100 {
+  border-color: rgba(251, 113, 133, 0.25) !important;
+}
+.dark :not(button):not(a):not(.btn).border-amber-200,
+.dark :not(button):not(a):not(.btn).border-amber-100 {
+  border-color: rgba(245, 158, 11, 0.25) !important;
+}
+
+/* Text overrides (light text on dark elements) */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-slate-950,
+.dark .text-gray-900,
+.dark .text-zinc-900 {
+  color: #f8fafc !important;
+}
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: #94a3b8 !important;
+}
+.dark .text-indigo-600,
+.dark .text-indigo-700 {
+  color: #a5b4fc !important;
+}
+.dark .text-emerald-600,
+.dark .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+.dark .text-rose-600,
+.dark .text-rose-700 {
+  color: #fca5a5 !important;
+}
+.dark .text-amber-600,
+.dark .text-amber-700 {
+  color: #fde047 !important;
+}
+
+/* Interactive & form elements styling for dark mode */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #1a2436 !important;
+  border-color: #2e3d5c !important;
+  color: #f8fafc !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Hover overrides */
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-indigo-50\/50:hover {
+  background-color: #1a243c !important;
+}
+
+/* Additional slate background colors used for progress bars and badges */
+.dark .bg-slate-200,
+.dark .bg-gray-200 {
+  background-color: #1c273e !important;
+}
+.dark .bg-slate-100,
+.dark .bg-gray-100 {
+  background-color: #121a2c !important;
+}
+
+/* Table header & item backgrounds */
+.dark .bg-slate-100\/50,
+.dark .bg-slate-50\/40,
+.dark .bg-slate-50\/60 {
+  background-color: #172237 !important;
+}
+
+/* Scrollbar customizations for dark mode */
+.dark ::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #1e293b;
+}
+
+/* Overrides for specific colorful elements in sidebar to be a gorgeous dark blue */
+.dark .bg-\[\#e6f4ea\] {
+  background-color: #0f172a !important;
+}
+.dark .bg-\[\#d5ecd9\]\/80 {
+  background-color: rgba(19, 27, 45, 0.8) !important;
+}
+.dark .bg-\[\#d5ecd9\]\/40 {
+  background-color: rgba(19, 27, 45, 0.4) !important;
+}
+.dark .text-emerald-950 {
+  color: #f1f5f9 !important;
+}
+.dark .text-emerald-700 {
+  color: #60a5fa !important; /* bright blue accent */
+}
+.dark .border-\[\#cbe2d3\] {
+  border-color: #1e293b !important;
+}
+
+/* ==========================================
+   BUTTONS AND INTERACTIVE ELEMENT STYLING IN DARK MODE
+   - Ensures borders are NOT altered/removed.
+   - Provides rich dark/black-mode background with crisp high contrast white text.
+   - Preserves high visibility and proper UI.
+   ========================================== */
+
+/* Standard buttons (originally white/light-gray backgrounds) in dark mode:
+   Get a polished dark slate/black mode background with crisp, readable white text */
+.dark button.bg-white,
+.dark button.bg-slate-50,
+.dark button.bg-slate-100,
+.dark button.bg-gray-100,
+.dark button.bg-gray-50,
+.dark button.bg-slate-100\/80,
+.dark .btn.bg-white {
+  background-color: #121a2e !important; /* Elegant black/dark background for buttons */
+  color: #ffffff !important; /* Crisp high contrast white text */
+}
+
+/* Primary, dark-themed, and status buttons:
+   Ensure they always have white text for optimal legibility */
+.dark button.bg-indigo-600,
+.dark button.bg-indigo-700,
+.dark button.bg-emerald-600,
+.dark button.bg-emerald-700,
+.dark button.bg-rose-600,
+.dark button.bg-rose-700,
+.dark button.bg-slate-900,
+.dark button.bg-slate-850,
+.dark button.bg-slate-950,
+.dark button.bg-black {
+  color: #ffffff !important; /* High contrast white text */
+}
+
+/* Accent/light buttons (active highlights, e.g. active tab states):
+   Ensure they have high-contrast light colored text on slightly deeper background tints */
+.dark button.bg-indigo-50,
+.dark button.bg-emerald-50,
+.dark button.bg-rose-50,
+.dark button.bg-amber-50 {
+  background-color: rgba(99, 102, 241, 0.25) !important;
+  color: #a5b4fc !important; /* Light indigo accent text */
+}
+
+/* Interactive hover feedback for standard buttons in dark mode */
+.dark button.bg-white:hover,
+.dark button.bg-slate-50:hover,
+.dark button.bg-slate-100:hover,
+.dark button.bg-gray-50:hover,
+.dark button.bg-gray-100:hover {
+  background-color: #1a253f !important;
+  color: #ffffff !important;
+}
+
+/* Advanced Radial Theme Transition keyframes */
+@keyframes radialWipe {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 1;
+  }
+  85% {
+    width: max(250vw, 250vh);
+    height: max(250vw, 250vh);
+    opacity: 1;
+  }
+  100% {
+    width: max(250vw, 250vh);
+    height: max(250vw, 250vh);
+    opacity: 0;
+  }
+}
+
+

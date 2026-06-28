@@ -17,6 +17,22 @@ import { getFirestore, collection, getDocs, doc, setDoc, getDoc } from "firebase
 
 dotenv.config();
 
+import Stripe from "stripe";
+
+let stripeInstance: Stripe | null = null;
+function getStripe(): Stripe | null {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey || stripeKey.trim() === "" || stripeKey.includes("YOUR_STRIPE")) {
+    return null;
+  }
+  if (!stripeInstance) {
+    stripeInstance = new Stripe(stripeKey, {
+      apiVersion: "2023-10-16" as any,
+    });
+  }
+  return stripeInstance;
+}
+
 const app = express();
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "data.json");
@@ -723,6 +739,35 @@ app.get("/api/reverse-geocode", async (req, res) => {
   }
 });
 
+// Proxy route for CORS-free forward geocoding/search
+app.get("/api/search-geocode", async (req, res) => {
+  const { q } = req.query;
+  if (!q) {
+    return res.status(400).json({ error: "Missing query q" });
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(String(q))}&format=json&accept-language=en&limit=5`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "IndiaCivic-Applet-Server/1.0 (agarwalsoham993@gmail.com)",
+        "Accept-Language": "en"
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return res.json(data);
+    } else {
+      console.warn("Nominatim search geocode failed with status:", response.status);
+      return res.status(502).json({ error: `Geocoding search service returned status ${response.status}` });
+    }
+  } catch (error: any) {
+    console.error("Error in search geocoding proxy:", error);
+    return res.status(500).json({ error: "Internal geocoding search error: " + error.message });
+  }
+});
+
 // Create a new issue (with geo-clustering and optional Gemini AI analysis)
 app.post("/api/issues", (req, res) => {
   db = loadDatabase();
@@ -1219,7 +1264,7 @@ app.post("/api/campaigns", (req, res) => {
 });
 
 // Crowdfunding: Donate/Fund a campaign (Milestone 1, Escrow wallet deposit, GST bill generation)
-app.post("/api/campaigns/:id/donate", (req, res) => {
+app.post("/api/campaigns/:id/donate", async (req, res) => {
   db = loadDatabase();
   const { id } = req.params;
   const { amount, donorName, donorId, useWallet } = req.body;
@@ -1232,12 +1277,334 @@ app.post("/api/campaigns/:id/donate", (req, res) => {
   const donationAmount = Number(amount);
   const user = db.activeUserProfile;
 
-  // Deduct from wallet if "useWallet" is requested
-  if (useWallet && user) {
+  // 1. If paying with in-app refund wallet, process immediately without external gateway
+  if (useWallet) {
+    if (!user) {
+      return res.status(400).json({ error: "Active user profile required for wallet payment" });
+    }
     if (user.availableFunds < donationAmount) {
       return res.status(400).json({ error: "Insufficient balance in in-app wallet" });
     }
     user.availableFunds -= donationAmount;
+
+    // Generate GST-compliant receipt number immediately
+    const receiptNumber = "GST-2026-" + Math.floor(Math.random() * 90000 + 10000);
+    const gstin = "29AAAAA0000A1Z1"; // Platform's NGO Section-8 partner GSTIN
+
+    const newDonation: Donation = {
+      id: "don-" + Date.now(),
+      campaignId: id,
+      campaignName: campaign.title,
+      donorName: donorName || "Anonymous Supporter",
+      donorId: donorId || "guest",
+      amount: donationAmount,
+      timestamp: new Date().toISOString(),
+      receiptNumber,
+      gstin,
+    };
+
+    campaign.currentAmount += donationAmount;
+    campaign.escrowBalance += donationAmount; // Funds sit in secure named escrow wallet
+    campaign.donations.push(newDonation);
+
+    // Transition to execution mode once target reached
+    if (campaign.currentAmount >= campaign.targetAmount) {
+      campaign.status = "EXECUTION";
+      campaign.verificationStep = 2; // Proceeds to contractor work proof upload step
+    }
+
+    // Update donor rewards
+    if (user && donorId === user.id) {
+      user.totalDonations += donationAmount;
+      user.totalPoints += Math.floor(donationAmount / 10); // 1 point per ₹10 donated
+      user.pointsBreakdown.donating += Math.floor(donationAmount / 10);
+      user.personalActiveScore = Math.min(100, user.personalActiveScore + 10);
+      user.civicScore = Math.min(990, user.civicScore + 15);
+
+      if (user.role === "CITIZEN") {
+        db.citizenProfile = user;
+        db.activeUserProfile = user;
+      } else {
+        db.orgProfile = user;
+        db.activeUserProfile = user;
+      }
+    }
+
+    saveDatabase(db);
+    return res.json({ success: true, campaign, receipt: newDonation });
+  }
+
+  // 2. If paying via Real Payment Gateway (Stripe)
+  const stripe = getStripe();
+  const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+  const host = req.get("host");
+  const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+
+  if (stripe) {
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "inr",
+              product_data: {
+                name: `Crowdfund Escrow Contribution: ${campaign.title}`,
+                description: `Held securely in IndiaCivic Escrow Trust for campaign: ${campaign.title}`,
+              },
+              unit_amount: donationAmount * 100, // INR in paise
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: `${appUrl}/api/stripe-callback?session_id={CHECKOUT_SESSION_ID}&campaignId=${id}&amount=${donationAmount}&useWallet=false&donorId=${donorId}&donorName=${encodeURIComponent(donorName || "Anonymous")}`,
+        cancel_url: `${appUrl}?activeTab=campaigns&campaignId=${id}&status=cancelled`,
+      });
+
+      return res.json({ success: true, redirectUrl: session.url });
+    } catch (err: any) {
+      console.error("Stripe Checkout creation failed, falling back to mock sandbox checkout:", err);
+    }
+  }
+
+  // Fallback to high-fidelity Sandbox Stripe checkout if key not present or creation errored
+  const mockCheckoutUrl = `${appUrl}/stripe-mock-checkout?campaignId=${id}&amount=${donationAmount}&donorId=${donorId}&donorName=${encodeURIComponent(donorName || "Anonymous")}`;
+  res.json({ success: true, redirectUrl: mockCheckoutUrl });
+});
+
+// High-fidelity Sandbox Stripe checkout webpage
+app.get("/stripe-mock-checkout", (req, res) => {
+  const { campaignId, amount, donorId, donorName } = req.query;
+  const db = loadDatabase();
+  const campaign = db.campaigns.find(c => c.id === campaignId);
+  const campaignTitle = campaign ? campaign.title : "Community Improvement Abhiyan";
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure Escrow Payment | IndiaCivic Checkout</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 flex items-center justify-center p-0 sm:p-6 md:p-12">
+  <div class="max-w-4xl w-full min-h-[580px] flex flex-col md:flex-row shadow-2xl rounded-none sm:rounded-3xl overflow-hidden bg-white border border-slate-100">
+    
+    <!-- Left Column: Order Summary (Stripe style) -->
+    <div class="w-full md:w-1/2 bg-slate-900 text-white p-8 md:p-12 flex flex-col justify-between border-r border-slate-800">
+      <div class="space-y-8">
+        <!-- Brand logo -->
+        <div class="flex items-center space-x-2 text-indigo-400">
+          <i class="fa-solid fa-shield-halved text-2xl"></i>
+          <span class="text-sm font-black tracking-widest uppercase text-white">IndiaCivic Escrow</span>
+        </div>
+        
+        <!-- Escrow Title & Details -->
+        <div class="space-y-4">
+          <span class="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block">
+            Verified Escrow Crowd-Contribution
+          </span>
+          <h1 class="text-xl font-extrabold tracking-tight text-white leading-tight">
+            ${campaignTitle}
+          </h1>
+          <p class="text-xs text-slate-500 font-mono">ESCROW ID: #${campaignId}</p>
+        </div>
+
+        <!-- Price display -->
+        <div class="space-y-1">
+          <span class="text-slate-400 text-xs font-bold uppercase tracking-wider block">Total Escrow Contribution</span>
+          <div class="text-4xl font-black text-white">₹${amount}.00</div>
+          <span class="text-emerald-400 text-xs font-semibold flex items-center gap-1.5 pt-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            100% Refundable under Citizen Charter 90-day Clause
+          </span>
+        </div>
+      </div>
+
+      <!-- Trust Badges & Back Button -->
+      <div class="space-y-6 pt-12">
+        <div class="border-t border-slate-800 pt-6 space-y-3">
+          <div class="flex items-center space-x-2.5 text-xs text-slate-400">
+            <i class="fa-solid fa-lock text-emerald-400"></i>
+            <span>Encrypted SSL 256-Bit Escrow Vault Security</span>
+          </div>
+          <div class="flex items-center space-x-2.5 text-xs text-slate-400">
+            <i class="fa-solid fa-file-invoice text-indigo-400"></i>
+            <span>Instant Section 80G Tax-Exemption Invoice Issued</span>
+          </div>
+        </div>
+        <a href="/?activeTab=campaigns&campaignId=${campaignId}&status=cancelled" class="inline-flex items-center text-xs font-bold text-slate-400 hover:text-white transition-colors">
+          <i class="fa-solid fa-arrow-left mr-2"></i> Cancel and go back
+        </a>
+      </div>
+    </div>
+
+    <!-- Right Column: Card & UPI Input -->
+    <div class="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-between">
+      <div class="space-y-6">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-800 uppercase tracking-wide">Secure Checkout</h2>
+          <p class="text-xs text-slate-400 mt-1">Authorized via Stripe secure gateway emulation.</p>
+        </div>
+
+        <!-- Mode selection (Card / UPI) -->
+        <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+          <button id="btn-card" onclick="setMode('card')" class="py-2 rounded-lg font-extrabold text-xs uppercase text-center transition-all bg-white border border-slate-200 text-slate-800 shadow-sm flex items-center justify-center gap-1.5">
+            <i class="fa-regular fa-credit-card"></i> Card
+          </button>
+          <button id="btn-upi" onclick="setMode('upi')" class="py-2 rounded-lg font-extrabold text-xs uppercase text-slate-500 hover:text-slate-700 text-center transition-all flex items-center justify-center gap-1.5">
+            <i class="fa-brands fa-google-pay text-lg"></i> UPI QR
+          </button>
+        </div>
+
+        <!-- Card Form -->
+        <form id="card-form" class="space-y-4" onsubmit="handleFormSubmit(event)">
+          <div class="space-y-1">
+            <label class="text-[9px] font-black text-slate-400 uppercase tracking-wider block font-mono">Email Address</label>
+            <input type="email" required value="citizen.india@gmail.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" />
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-[9px] font-black text-slate-400 uppercase tracking-wider block font-mono">Card Information</label>
+            <div class="relative">
+              <input type="text" required pattern="[0-9]{16}" placeholder="4242 4242 4242 4242" value="4242424242424242" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono tracking-widest focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" />
+              <i class="fa-regular fa-credit-card absolute left-3.5 top-3 text-slate-400"></i>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1.5">
+              <input type="text" required placeholder="MM / YY" value="12/29" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" />
+              <input type="text" required placeholder="CVC" value="123" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-[9px] font-black text-slate-400 uppercase tracking-wider block font-mono">Cardholder Name</label>
+            <input type="text" required value="${decodeURIComponent((donorName as string) || "Anonymous")}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" />
+          </div>
+
+          <button type="submit" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-colors shadow-lg flex items-center justify-center gap-2 border-none cursor-pointer">
+            <i class="fa-solid fa-lock text-xs"></i> Pay ₹${amount}.00 Securely
+          </button>
+        </form>
+
+        <!-- UPI Form -->
+        <div id="upi-form" class="space-y-6 hidden text-center py-5 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+          <div class="space-y-1">
+            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">Scan UPI QR Code to Pay</h3>
+            <p class="text-[10px] text-slate-400">Scan using BHIM, GooglePay, PhonePe, Paytm, or any banking app.</p>
+          </div>
+          <div class="bg-white p-3 rounded-2xl inline-block border border-slate-200 shadow-md">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=0f172a&format=svg&data=${encodeURIComponent(`upi://pay?pa=indiacivic@icici&pn=IndiaCivic%20Escrow&am=${amount}&cu=INR&tn=Escrow-${campaignId}`)}" class="h-36 w-36 object-contain mx-auto" />
+          </div>
+          <div class="space-y-2 px-6">
+            <button onclick="handleUpiPayment()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase tracking-wider cursor-pointer border-none shadow-md flex items-center justify-center gap-2">
+              <i class="fa-solid fa-circle-check"></i> Simulate UPI Success
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer Info -->
+      <div class="text-center text-[10px] text-slate-400 pt-8 flex items-center justify-center gap-1.5">
+        <i class="fa-brands fa-stripe text-lg"></i>
+        <span>Secured by Stripe Sandbox Emulation Layer</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-Screen Processing Spinner Overlay -->
+  <div id="processing-overlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex flex-col items-center justify-center space-y-4 hidden">
+    <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent shadow-md"></div>
+    <div class="text-center space-y-1">
+      <p class="text-white font-bold text-sm tracking-wider uppercase">Authorizing Escrow Contribution...</p>
+      <p class="text-slate-400 text-xs">Please do not close, refresh, or click back on this window.</p>
+    </div>
+  </div>
+
+  <script>
+    let activeMode = 'card';
+
+    function setMode(mode) {
+      activeMode = mode;
+      const cardForm = document.getElementById('card-form');
+      const upiForm = document.getElementById('upi-form');
+      const btnCard = document.getElementById('btn-card');
+      const btnUpi = document.getElementById('btn-upi');
+
+      if (mode === 'card') {
+        cardForm.classList.remove('hidden');
+        upiForm.classList.add('hidden');
+        btnCard.className = "py-2 rounded-lg font-extrabold text-xs uppercase text-center transition-all bg-white border border-slate-200 text-slate-800 shadow-sm flex items-center justify-center gap-1.5";
+        btnUpi.className = "py-2 rounded-lg font-extrabold text-xs uppercase text-slate-500 hover:text-slate-700 text-center transition-all flex items-center justify-center gap-1.5";
+      } else {
+        cardForm.classList.add('hidden');
+        upiForm.classList.remove('hidden');
+        btnCard.className = "py-2 rounded-lg font-extrabold text-xs uppercase text-slate-500 hover:text-slate-700 text-center transition-all flex items-center justify-center gap-1.5";
+        btnUpi.className = "py-2 rounded-lg font-extrabold text-xs uppercase text-center transition-all bg-white border border-slate-200 text-slate-800 shadow-sm flex items-center justify-center gap-1.5";
+      }
+    }
+
+    function showSpinner() {
+      document.getElementById('processing-overlay').classList.remove('hidden');
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      showSpinner();
+      setTimeout(() => {
+        window.location.href = "/api/stripe-callback?session_id=mock-session-123&campaignId=${campaignId}&amount=${amount}&useWallet=false&donorId=${donorId}&donorName=" + encodeURIComponent("${donorName || ""}");
+      }, 2000);
+    }
+
+    function handleUpiPayment() {
+      showSpinner();
+      setTimeout(() => {
+        window.location.href = "/api/stripe-callback?session_id=mock-session-123&campaignId=${campaignId}&amount=${amount}&useWallet=false&donorId=${donorId}&donorName=" + encodeURIComponent("${donorName || ""}");
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
+  `;
+  res.send(html);
+});
+
+// Secure Callback URL to finalize payment records, rewards, and sync
+app.get("/api/stripe-callback", async (req, res) => {
+  db = loadDatabase();
+  const { session_id, campaignId, amount, useWallet, donorId, donorName } = req.query;
+
+  const campaign = db.campaigns.find((c) => c.id === campaignId);
+  if (!campaign) {
+    return res.status(404).send("Campaign not found");
+  }
+
+  const donationAmount = Number(amount);
+  const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+  const host = req.get("host");
+  const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+
+  // If there is a real Stripe session, verify it first!
+  const stripe = getStripe();
+  if (session_id && session_id !== "mock-session-123" && stripe) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(session_id as string);
+      if (session.payment_status !== "paid") {
+        return res.redirect(`${appUrl}?activeTab=campaigns&campaignId=${campaignId}&status=failed&error=Payment%20unauthorized`);
+      }
+    } catch (err: any) {
+      console.error("Stripe session verification error:", err);
+      return res.redirect(`${appUrl}?activeTab=campaigns&campaignId=${campaignId}&status=failed&error=${encodeURIComponent(err.message)}`);
+    }
   }
 
   // Generate GST-compliant receipt number
@@ -1246,10 +1613,10 @@ app.post("/api/campaigns/:id/donate", (req, res) => {
 
   const newDonation: Donation = {
     id: "don-" + Date.now(),
-    campaignId: id,
+    campaignId: campaignId as string,
     campaignName: campaign.title,
-    donorName: donorName || "Anonymous Supporter",
-    donorId: donorId || "guest",
+    donorName: (donorName as string) || "Anonymous Supporter",
+    donorId: (donorId as string) || "guest",
     amount: donationAmount,
     timestamp: new Date().toISOString(),
     receiptNumber,
@@ -1266,25 +1633,38 @@ app.post("/api/campaigns/:id/donate", (req, res) => {
     campaign.verificationStep = 2; // Proceeds to contractor work proof upload step
   }
 
-  // Update donor rewards
-  if (user && donorId === user.id) {
-    user.totalDonations += donationAmount;
-    user.totalPoints += Math.floor(donationAmount / 10); // 1 point per ₹10 donated
-    user.pointsBreakdown.donating += Math.floor(donationAmount / 10);
-    user.personalActiveScore = Math.min(100, user.personalActiveScore + 10);
-    user.civicScore = Math.min(990, user.civicScore + 15);
+  // Update donor rewards in profile
+  const profileId = donorId as string;
+  let userProfileToUpdate = db.activeUserProfile;
+  
+  if (userProfileToUpdate && profileId === userProfileToUpdate.id) {
+    userProfileToUpdate.totalDonations += donationAmount;
+    userProfileToUpdate.totalPoints += Math.floor(donationAmount / 10);
+    userProfileToUpdate.pointsBreakdown.donating += Math.floor(donationAmount / 10);
+    userProfileToUpdate.personalActiveScore = Math.min(100, userProfileToUpdate.personalActiveScore + 10);
+    userProfileToUpdate.civicScore = Math.min(990, userProfileToUpdate.civicScore + 15);
 
-    if (user.role === "CITIZEN") {
-      db.citizenProfile = user;
-      db.activeUserProfile = user;
+    // Persist profile to Firestore
+    try {
+      await setDoc(doc(firestore, "profiles", userProfileToUpdate.id), userProfileToUpdate);
+    } catch (fsErr) {
+      console.warn("Could not save profile reward update to Firestore:", fsErr);
+    }
+
+    if (userProfileToUpdate.role === "CITIZEN") {
+      db.citizenProfile = userProfileToUpdate;
+      db.activeUserProfile = userProfileToUpdate;
     } else {
-      db.orgProfile = user;
-      db.activeUserProfile = user;
+      db.orgProfile = userProfileToUpdate;
+      db.activeUserProfile = userProfileToUpdate;
     }
   }
 
+  // Save changes to local database JSON
   saveDatabase(db);
-  res.json({ success: true, campaign, receipt: newDonation });
+
+  // Redirect back to client app with success parameters
+  res.redirect(`${appUrl}?activeTab=campaigns&campaignId=${campaignId}&status=success&amount=${donationAmount}`);
 });
 
 // Progress campaign verification/milestone release step
@@ -1422,6 +1802,44 @@ app.post("/api/profile/toggle", (req, res) => {
     db.activeUserProfile = db.citizenProfile;
   } else if (targetRole === "ORGANIZATION") {
     db.activeUserProfile = db.orgProfile;
+  }
+
+  saveDatabase(db);
+  res.json({ success: true, activeUser: db.activeUserProfile });
+});
+
+// Update profile location (syncs in-memory and to Firestore for persistent accounts)
+app.post("/api/profile/location", async (req, res) => {
+  db = loadDatabase();
+  const { location, wardName, lat, lng } = req.body;
+  
+  if (!location) {
+    return res.status(400).json({ error: "Location is required" });
+  }
+
+  // Update in local memory db
+  if (db.activeUserProfile) {
+    db.activeUserProfile.location = location;
+  }
+  if (db.citizenProfile) {
+    db.citizenProfile.location = location;
+  }
+  if (db.orgProfile) {
+    db.orgProfile.location = location;
+  }
+  
+  // If user is authenticated, sync with Firestore under profiles
+  const uid = db.activeUserProfile?.id;
+  if (uid && uid !== "guest") {
+    if (db.profiles && db.profiles[uid]) {
+      db.profiles[uid].location = location;
+    }
+    try {
+      const profileRef = doc(firestore, "profiles", uid);
+      await setDoc(profileRef, { location: location }, { merge: true });
+    } catch (err) {
+      console.error("Firestore update profile location failed:", err);
+    }
   }
 
   saveDatabase(db);

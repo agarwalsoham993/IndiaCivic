@@ -584,14 +584,14 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
       {/* Top title */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-800 uppercase tracking-wider">REPORT A CIVIC ISSUE</h2>
-          <p className="text-xs text-slate-400 font-semibold uppercase mt-0.5">certified civic reporting center</p>
+          <h2 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wider">REPORT A CIVIC ISSUE</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase mt-0.5">certified civic reporting center</p>
         </div>
       </div>
 
       {/* Mode sliding selector toggle */}
       {!showSubmitPage && (
-        <div className="bg-slate-100 p-1.5 rounded-2xl relative flex items-center shadow-xs border border-slate-200">
+        <div className="bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl relative flex items-center shadow-xs border border-slate-200 dark:border-slate-800/80">
           {modes.map((m) => {
             const IconComponent = m.icon;
             const isSelected = activeMode === m.id;
@@ -607,12 +607,12 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                 {isSelected && (
                   <motion.div
                     layoutId="activeReportMode"
-                    className="absolute inset-0 bg-white rounded-xl shadow-md border border-slate-100 -z-10"
+                    className="absolute inset-0 bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-100 dark:border-slate-700/50 -z-10"
                     transition={{ type: "spring", stiffness: 350, damping: 30 }}
                   />
                 )}
-                <IconComponent className={`h-4.5 w-4.5 ${isSelected ? "text-indigo-600" : "text-slate-500"}`} />
-                <span className={isSelected ? "text-slate-800 font-extrabold" : "text-slate-500"}>{m.label}</span>
+                <IconComponent className={`h-4.5 w-4.5 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"}`} />
+                <span className={isSelected ? "text-slate-800 dark:text-slate-100 font-extrabold" : "text-slate-500 dark:text-slate-400"}>{m.label}</span>
               </button>
             );
           })}
@@ -633,34 +633,65 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
             {/* 1. CAMERA MODE */}
             {activeMode === "camera" && (
               <div className="space-y-4">
-                <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-6 shadow-sm flex flex-col items-center justify-center min-h-[340px]">
-                  <div className="space-y-2">
-                    <div className="mx-auto h-16 w-16 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mb-2 relative">
-                      <Camera className="h-7 w-7" />
-                      <span className="absolute inset-0 rounded-full border-2 border-indigo-500/20 animate-ping" />
+                {!isMobile ? (
+                  /* Desktop Mode: use mobile device notice with QR code of current origin */
+                  <div className="bg-white dark:bg-[#131b2d]/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-8 text-center space-y-6 shadow-sm flex flex-col items-center justify-center min-h-[340px]">
+                    <div className="space-y-2">
+                      <div className="mx-auto h-16 w-16 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-2 relative">
+                        <Camera className="h-7 w-7" />
+                        <span className="absolute inset-0 rounded-full border-2 border-indigo-500/20 animate-ping" />
+                      </div>
+                      <h3 className="text-base font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">Mobile Camera Required</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                        To capture authenticated GPS-geotagged civic evidence, please scan this QR code with your mobile or tablet device to use its built-in hardware camera.
+                      </p>
                     </div>
-                    <h3 className="text-base font-black text-slate-800 uppercase tracking-wider">CAPTURE CIVIC EVIDENCE</h3>
-                    <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                      Snap a photo or record video testimony of waste, waterlogging, or other local issues. Media is cryptographically geotagged for authenticity.
-                    </p>
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsFullScreenCameraOpen(true);
-                    }}
-                    className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-3.5 px-8 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider border-none"
-                  >
-                    <Camera className="h-4.5 w-4.5" />
-                    <span>Open Camera</span>
-                  </button>
+                    <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 p-4 rounded-3xl inline-block shadow-inner">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=0f172a&format=svg&data=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://indiacivic-811492221296.asia-south1.run.app/")}`} 
+                        alt="IndiaCivic Mobile Camera upload link" 
+                        className="h-36 w-36 object-contain bg-white p-2 rounded-2xl mx-auto"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
 
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-full text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Certified Safe Geotag Verification Enabled</span>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 rounded-full text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase tracking-wider">
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                      <span>Scan to open on mobile & capture instantly</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Mobile Mode: show Open Camera buttons */
+                  <div className="bg-white dark:bg-[#131b2d]/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-8 text-center space-y-6 shadow-sm flex flex-col items-center justify-center min-h-[340px]">
+                    <div className="space-y-2">
+                      <div className="mx-auto h-16 w-16 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-2 relative">
+                        <Camera className="h-7 w-7" />
+                        <span className="absolute inset-0 rounded-full border-2 border-indigo-500/20 animate-ping" />
+                      </div>
+                      <h3 className="text-base font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">CAPTURE CIVIC EVIDENCE</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                        Snap a photo or record video testimony of waste, waterlogging, or other local issues. Media is cryptographically geotagged for authenticity.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFullScreenCameraOpen(true);
+                      }}
+                      className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-3.5 px-8 rounded-xl shadow-md cursor-pointer transition-colors uppercase tracking-wider border-none"
+                    >
+                      <Camera className="h-4.5 w-4.5" />
+                      <span>Open Camera</span>
+                    </button>
+
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 rounded-full text-emerald-700 dark:text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Certified Safe Geotag Verification Enabled</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -668,13 +699,13 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
             {activeMode === "upload" && (
               <div className="space-y-5">
                 {/* Upload drag drop zone */}
-                <label className="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-8 bg-white flex flex-col items-center justify-center text-center cursor-pointer transition-all space-y-3 block">
-                  <div className="p-4 bg-slate-50 rounded-full text-indigo-600">
+                <label className="border-2 border-dashed border-slate-300 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-400 rounded-2xl p-8 bg-white dark:bg-[#131b2d]/80 flex flex-col items-center justify-center text-center cursor-pointer transition-all space-y-3 block">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-full text-indigo-600 dark:text-indigo-400">
                     <UploadCloud className="h-9 w-9" />
                   </div>
                   <div className="space-y-1">
-                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">Drag & Drop or Tap to Browse File</span>
-                    <p className="text-[10px] text-slate-400">Supports JPEG, PNG, MP4 up to 50MB</p>
+                    <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 uppercase tracking-wide">Drag & Drop or Tap to Browse File</span>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">Supports JPEG, PNG, MP4 up to 50MB</p>
                   </div>
                   <input
                     type="file"
@@ -686,10 +717,10 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
 
                 {/* Loading scanner animation */}
                 {checkingMetadata && (
-                  <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 flex flex-col items-center justify-center text-center space-y-2 animate-pulse">
-                    <RefreshCw className="h-6 w-6 text-indigo-600 animate-spin" />
-                    <span className="text-[11px] font-extrabold text-indigo-950 uppercase tracking-wider">Checking EXIF Geotag Data & Timestamp...</span>
-                    <p className="text-[9px] text-slate-400">Authenticating camera headers to reject screenshot fraud.</p>
+                  <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-950/50 bg-indigo-50/50 dark:bg-indigo-950/20 flex flex-col items-center justify-center text-center space-y-2 animate-pulse">
+                    <RefreshCw className="h-6 w-6 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                    <span className="text-[11px] font-extrabold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider">Checking EXIF Geotag Data & Timestamp...</span>
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500">Authenticating camera headers to reject screenshot fraud.</p>
                   </div>
                 )}
 
@@ -700,40 +731,40 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                     animate={{ opacity: 1, scale: 1 }}
                     className={`p-4 rounded-2xl border ${
                       metadataResult.valid 
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-950" 
-                        : "bg-rose-50 border-rose-200 text-rose-950"
+                        ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-950 dark:text-emerald-100" 
+                        : "bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-950 dark:text-rose-100"
                     } space-y-3 text-xs`}
                   >
-                    <div className="flex items-center space-x-2 border-b pb-2">
+                    <div className="flex items-center space-x-2 border-b border-current/10 pb-2">
                       {metadataResult.valid ? (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                       ) : (
-                        <AlertTriangle className="h-5 w-5 text-rose-600" />
+                        <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                       )}
                       <span className="font-extrabold uppercase tracking-wider text-sm">
                         {metadataResult.valid ? "Certified EXIF Geotags Verified" : "Verification Rejected"}
                       </span>
                     </div>
 
-                    <div className="space-y-1 text-slate-700 text-[11px]">
+                    <div className="space-y-1 text-slate-700 dark:text-slate-300 text-[11px]">
                       <div><strong>File:</strong> {metadataResult.fileName} ({metadataResult.fileSize})</div>
                       {metadataResult.valid ? (
                         <>
-                          <div className="flex items-center space-x-1 text-emerald-700 font-bold mt-1">
+                          <div className="flex items-center space-x-1 text-emerald-700 dark:text-emerald-400 font-bold mt-1">
                             <MapPin className="h-3.5 w-3.5" />
                             <span>Location: {metadataResult.lat}° N, {metadataResult.lng}° E</span>
                           </div>
-                          <div className="flex items-center space-x-1 text-emerald-700 font-bold">
+                          <div className="flex items-center space-x-1 text-emerald-700 dark:text-emerald-400 font-bold">
                             <Calendar className="h-3.5 w-3.5" />
                             <span>Timestamp: {metadataResult.timestamp}</span>
                           </div>
-                          <p className="text-[10px] text-emerald-600 font-medium leading-normal mt-1.5">
+                          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium leading-normal mt-1.5">
                             {metadataResult.details}
                           </p>
                         </>
                       ) : (
                         <>
-                          <p className="text-[10px] text-rose-600 font-extrabold leading-normal mt-1.5">
+                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold leading-normal mt-1.5">
                             We do not accept files that lack valid GPS location metadata in order to prevent fraud. Please capture the issue using your phone camera or upload a photo that contains valid geotags.
                           </p>
                         </>
@@ -759,54 +790,54 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
 
             {/* 3. SOCIAL MEDIA LINK MODE */}
             {activeMode === "social" && (
-              <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm">
+              <div className="rounded-2xl bg-white dark:bg-[#131b2d]/80 border border-slate-200 dark:border-slate-800/80 p-5 space-y-4 shadow-sm">
                 <div>
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">Add a Social Media Post</h3>
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase">IndiaCivic scrape engine automatically routes public posts</p>
+                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide">Add a Social Media Post</h3>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase">IndiaCivic scrape engine automatically routes public posts</p>
                 </div>
 
                 {/* Social media inputs */}
                 <div className="space-y-3.5">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Social Post Link (Required)</label>
+                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Social Post Link (Required)</label>
                     <input
                       type="text"
                       placeholder="Paste Instagram, YouTube, X/Twitter, or Reddit post url..."
                       value={socialLink}
                       onChange={(e) => setSocialLink(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Description of Issue (Required)</label>
+                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Description of Issue (Required)</label>
                     <textarea
                       placeholder="Specify what needs repair or attention..."
                       value={socialDescription}
                       onChange={(e) => setSocialDescription(e.target.value)}
-                      className="w-full h-24 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+                      className="w-full h-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Location Name (Required Manually)</label>
+                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Location Name (Required Manually)</label>
                     <input
                       type="text"
                       placeholder="e.g., 100 Feet Rd near Starbucks, Indiranagar, Bengaluru"
                       value={socialLocation}
                       onChange={(e) => setSocialLocation(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
                     />
                   </div>
 
                   {/* Choose Category */}
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Issue Category</label>
+                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Issue Category</label>
                     <div className="relative">
                       <select
                         value={selectedCategory}
                         onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl p-3 pr-10 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm cursor-pointer"
+                        className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 pr-10 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm cursor-pointer"
                       >
                         {categories.map((cat) => (
                           <option key={cat} value={cat}>
@@ -820,14 +851,14 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                 </div>
 
                 {errorMsg && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center space-x-2 shadow-sm">
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl text-rose-700 dark:text-rose-400 text-xs font-semibold flex items-center space-x-2 shadow-sm">
                     <AlertTriangle className="h-4.5 w-4.5 flex-shrink-0" />
                     <span>{errorMsg}</span>
                   </div>
                 )}
 
                 {successMsg && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs font-semibold flex items-center space-x-2 shadow-sm">
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl text-emerald-700 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-2 shadow-sm">
                     <CheckCircle className="h-4.5 w-4.5 flex-shrink-0" />
                     <span>{successMsg}</span>
                   </div>
@@ -860,15 +891,15 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                 setScanResult(null);
                 setErrorMsg("");
               }}
-              className="flex items-center space-x-2 text-xs font-extrabold text-slate-500 hover:text-slate-800 transition-all uppercase tracking-wider cursor-pointer border-none bg-transparent"
+              className="flex items-center space-x-2 text-xs font-extrabold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all uppercase tracking-wider cursor-pointer border-none bg-transparent"
             >
               <ArrowLeft className="h-4.5 w-4.5" />
               <span>Back to Recapture / Reupload</span>
             </button>
 
             {/* FILE UPLOADED CARD */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center space-x-4 shadow-sm relative overflow-hidden">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center flex-shrink-0">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#131b2d]/80 p-4 flex items-center space-x-4 shadow-sm relative overflow-hidden">
+              <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center flex-shrink-0">
                 {capturedPhoto ? (
                   <img src={capturedPhoto} alt="Upload Thumbnail" className="w-full h-full object-cover" />
                 ) : capturedVideo ? (
@@ -882,10 +913,10 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
               </div>
 
               <div className="flex-1 min-w-0 text-left space-y-0.5">
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
                   {uploadedFile ? "FILE IMPORTED" : "LIVE CAPTURE"}
                 </span>
-                <h4 className="text-xs font-bold text-slate-800 truncate">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
                   {uploadedFile ? uploadedFile.name : `Certified_Media_Capture_${Date.now().toString().slice(-4)}.jpg`}
                 </h4>
                 <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-semibold uppercase">
@@ -901,7 +932,7 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
               <button
                 type="button"
                 onClick={clearCapturedMedia}
-                className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border-none bg-transparent"
+                className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer border-none bg-transparent"
                 title="Remove evidence"
               >
                 <Trash2 className="h-4.5 w-4.5" />
@@ -909,22 +940,22 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
             </div>
 
             {/* MAIN FORM */}
-            <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm">
+            <div className="rounded-2xl bg-white dark:bg-[#131b2d]/80 border border-slate-200 dark:border-slate-800/80 p-5 space-y-4 shadow-sm">
               {/* Anonymous vs Points toggler */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80">
                 <div className="flex items-center space-x-3 text-left">
-                  <div className={`p-2 rounded-lg ${earnPointsMode ? "bg-indigo-50 border border-indigo-100" : "bg-rose-50 border border-rose-100"}`}>
+                  <div className={`p-2 rounded-lg ${earnPointsMode ? "bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50" : "bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/50"}`}>
                     {earnPointsMode ? (
-                      <CheckCircle className="h-5 w-5 text-indigo-600" />
+                      <CheckCircle className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                     ) : (
-                      <EyeOff className="h-5 w-5 text-rose-600" />
+                      <EyeOff className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                     )}
                   </div>
                   <div>
-                    <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">
+                    <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
                       {earnPointsMode ? "EARN POINTS MODE" : "ANONYMOUS REPORT"}
                     </h4>
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase">
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase">
                       {earnPointsMode ? "Visible profile • Gain XP points" : "Identity hidden • No points granted"}
                     </p>
                   </div>
@@ -944,33 +975,33 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
 
               {/* Title Input field */}
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide block">Create Title</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide block">Create Title</label>
                 <input
                   type="text"
                   placeholder="Summarize the issue in a few words..."
                   value={issueTitle}
                   onChange={(e) => setIssueTitle(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm font-medium"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm font-medium"
                 />
               </div>
 
               {/* Description textarea */}
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide block">Description</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide block">Description</label>
                 <textarea 
                   placeholder="What needs fixing? E.g., Overflowing green municipal garbage bins blocking traffic..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full h-24 bg-white border border-slate-200 rounded-xl p-3.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+                  className="w-full h-24 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
                 />
               </div>
 
               {/* Dynamic Geolocation & Address field */}
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center justify-between">
                   <span>Detected Location / Landmark</span>
                   {locationLoading && (
-                    <span className="text-[10px] text-indigo-600 animate-pulse font-extrabold uppercase">
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 animate-pulse font-extrabold uppercase">
                       Detecting actual location...
                     </span>
                   )}
@@ -981,35 +1012,35 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                     placeholder="Enter neighborhood, street, or landmark..."
                     value={locationName}
                     onChange={(e) => setLocationName(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-3 pr-10 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm font-medium"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 pr-10 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm font-medium"
                   />
                   <button
                     type="button"
                     onClick={refreshReportLocation}
                     title="Recalculate location from GPS"
-                    className="absolute right-2 p-1.5 hover:bg-slate-100 rounded-lg text-indigo-600 hover:text-indigo-700 transition-all border-none bg-transparent cursor-pointer"
+                    className="absolute right-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-indigo-600 dark:text-indigo-400 transition-all border-none bg-transparent cursor-pointer"
                   >
-                    <MapPin className={`h-4.5 w-4.5 ${locationLoading ? "animate-bounce text-indigo-600" : "text-slate-400"}`} />
+                    <MapPin className={`h-4.5 w-4.5 ${locationLoading ? "animate-bounce text-indigo-600 dark:text-indigo-400" : "text-slate-400"}`} />
                   </button>
                 </div>
-                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase font-mono">
+                <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase font-mono">
                   <span>GPS: {coords.lat.toFixed(6)}° N, {coords.lng.toFixed(6)}° E</span>
                   {isActualLocation ? (
-                    <span className="text-emerald-600">✓ Actual GPS Verified</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">✓ Actual GPS Verified</span>
                   ) : (
-                    <span className="text-indigo-500 animate-pulse">🛰️ Detecting GPS...</span>
+                    <span className="text-indigo-500 dark:text-indigo-400 animate-pulse">🛰️ Detecting GPS...</span>
                   )}
                 </div>
               </div>
 
               {/* Category selector */}
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide block">Choose Issue Category</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide block">Choose Issue Category</label>
                 <div className="relative">
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full appearance-none bg-white border border-slate-200 rounded-xl p-3.5 pr-10 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm cursor-pointer"
+                    className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 pr-10 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm cursor-pointer"
                   >
                     {categories.map((cat) => (
                       <option key={cat} value={cat}>
@@ -1023,16 +1054,16 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
 
               {/* Evidence field */}
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center">
-                  <Link2 className="h-3.5 w-3.5 mr-1 text-indigo-600" />
-                  Attach Public Reel / Post Link <span className="ml-1 text-[10px] text-slate-400 font-semibold">(Optional evidence)</span>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center">
+                  <Link2 className="h-3.5 w-3.5 mr-1 text-indigo-600 dark:text-indigo-400" />
+                  Attach Public Reel / Post Link <span className="ml-1 text-[10px] text-slate-400 dark:text-slate-500 font-semibold">(Optional evidence)</span>
                 </label>
                 <input 
                   type="text" 
                   placeholder="Paste Instagram, YouTube, or Twitter/X post link..."
                   value={evidenceLink}
                   onChange={(e) => setEvidenceLink(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
                 />
               </div>
 
@@ -1042,7 +1073,7 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                   type="button"
                   disabled={isScanning}
                   onClick={handleAIScan}
-                  className="flex-1 py-3 px-4 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition-all font-bold text-xs text-indigo-700 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 shadow-sm"
+                  className="flex-1 py-3 px-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-all font-bold text-xs text-indigo-700 dark:text-indigo-300 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 shadow-sm"
                 >
                   <ScanLine className={`h-4.5 w-4.5 ${isScanning ? "animate-spin" : ""}`} />
                   <span>{isScanning ? "AI SCANNING IMAGE & TEXT..." : "TRIGGER AI ROUTING SCAN"}</span>
@@ -1054,42 +1085,42 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                 <motion.div 
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs text-left shadow-sm animate-fade-in"
+                  className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 space-y-3 text-xs text-left shadow-sm animate-fade-in"
                 >
-                  <div className="flex justify-between border-b border-slate-200 pb-2">
-                    <span className="font-bold text-indigo-700 uppercase">AI CATEGORY IDENTIFIED</span>
-                    <span className="font-extrabold text-slate-800 uppercase">{scanResult.category}</span>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-2 text-indigo-700 dark:text-indigo-400 font-bold uppercase">
+                    <span>AI CATEGORY IDENTIFIED</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100 uppercase">{scanResult.category}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">DEPARTMENT ROUTED</span>
-                      <span className="font-semibold text-slate-700">{scanResult.department}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">DEPARTMENT ROUTED</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{scanResult.department}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">OFFICER / COOPERATOR</span>
-                      <span className="font-semibold text-slate-700">{scanResult.representative}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">OFFICER / COOPERATOR</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{scanResult.representative}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">ESTIMATED SEVERITY</span>
-                      <span className="font-bold text-rose-700 uppercase">{scanResult.severity}/5 (Urgent Action)</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">ESTIMATED SEVERITY</span>
+                      <span className="font-bold text-rose-700 dark:text-rose-400 uppercase">{scanResult.severity}/5 (Urgent Action)</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">FRAUD DETECTION SCORE</span>
-                      <span className="font-extrabold text-emerald-700 uppercase">Passed (EXIF Match)</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">FRAUD DETECTION SCORE</span>
+                      <span className="font-extrabold text-emerald-700 dark:text-emerald-400 uppercase">Passed (EXIF Match)</span>
                     </div>
                   </div>
                 </motion.div>
               )}
 
               {errorMsg && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center space-x-2 shadow-sm text-left">
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl text-rose-700 dark:text-rose-400 text-xs font-semibold flex items-center space-x-2 shadow-sm text-left">
                   <AlertTriangle className="h-4.5 w-4.5 flex-shrink-0" />
                   <span>{errorMsg}</span>
                 </div>
               )}
 
               {successMsg && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs font-semibold flex items-center space-x-2 shadow-sm text-left">
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl text-emerald-700 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-2 shadow-sm text-left">
                   <CheckCircle className="h-4.5 w-4.5 flex-shrink-0" />
                   <span>{successMsg}</span>
                 </div>

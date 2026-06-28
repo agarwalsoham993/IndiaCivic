@@ -22,7 +22,8 @@ import {
   RotateCcw,
   PlayCircle,
   ThumbsUp,
-  X
+  X,
+  Loader2
 } from "lucide-react";
 import { Campaign, Donation, UserProfile } from "../types";
 
@@ -32,9 +33,10 @@ interface CampaignsViewProps {
   onDonate: (campaignId: string, amount: number, useWallet: boolean) => Promise<any>;
   onVerifyStep: (campaignId: string, step: number, vote?: 'AGREE' | 'DISAGREE') => Promise<any>;
   onSimulate90Days: (campaignId: string) => Promise<any>;
+  onRefresh?: () => void;
 }
 
-export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep, onSimulate90Days }: CampaignsViewProps) {
+export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep, onSimulate90Days, onRefresh }: CampaignsViewProps) {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [donationAmount, setDonationAmount] = useState<number>(1000);
   const [paymentMethod, setPaymentMethod] = useState<"upi" | "card">("upi");
@@ -44,6 +46,92 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
   const [activeTab, setActiveTab] = useState<"all" | "active" | "resolved">("all");
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Campaign creation states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCampTitle, setNewCampTitle] = useState("");
+  const [newCampDesc, setNewCampDesc] = useState("");
+  const [newCampTarget, setNewCampTarget] = useState("");
+  const [newCampCategory, setNewCampCategory] = useState("Drainage & Waterlogging");
+  const [newCampLinkedIssues, setNewCampLinkedIssues] = useState<string[]>([]);
+  const [isSubmittingCampaign, setIsSubmittingCampaign] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [allIssues, setAllIssues] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    fetch("/api/issues")
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error();
+      })
+      .then((data) => {
+        setAllIssues(data || []);
+      })
+      .catch((err) => console.error("Error loading issues for campaign creation dropdown:", err));
+  }, []);
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError("");
+    setCreateSuccess("");
+    
+    if (!newCampTitle.trim()) {
+      setCreateError("Please provide a title for the Abhiyan.");
+      return;
+    }
+    if (!newCampDesc.trim()) {
+      setCreateError("Please provide a description of planned work.");
+      return;
+    }
+    const target = Number(newCampTarget);
+    if (isNaN(target) || target <= 0) {
+      setCreateError("Please enter a valid target amount (greater than 0).");
+      return;
+    }
+
+    setIsSubmittingCampaign(true);
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newCampTitle,
+          description: `[Category: ${newCampCategory}] ${newCampDesc}`,
+          targetAmount: target,
+          linkedIssueIds: newCampLinkedIssues
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setCreateSuccess("Abhiyan launched successfully! Escrow contract initialized.");
+          setNewCampTitle("");
+          setNewCampDesc("");
+          setNewCampTarget("");
+          setNewCampLinkedIssues([]);
+          
+          if (onRefresh) {
+            onRefresh();
+          }
+          
+          setTimeout(() => {
+            setShowCreateModal(false);
+            setCreateSuccess("");
+          }, 1500);
+        } else {
+          setCreateError(data.error || "Failed to create campaign on server.");
+        }
+      } else {
+        setCreateError("Server error launching Abhiyan.");
+      }
+    } catch (err: any) {
+      setCreateError("Network error: " + err.message);
+    } finally {
+      setIsSubmittingCampaign(false);
+    }
+  };
 
   const filteredCampaigns = campaigns.filter(camp => {
     if (activeTab === "all") return true;
@@ -108,10 +196,21 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
   return (
     <div className="space-y-6 pb-24 text-left">
-      {/* Header */}
-      <div>
-        <h2 className="text-xl font-extrabold text-slate-800 uppercase tracking-wider">ABHIYAN HUB</h2>
-        <p className="text-xs text-slate-400 font-semibold uppercase mt-0.5">Crowdfunding Local Ward Projects</p>
+      {/* Header with Launch Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+        <div>
+          <h2 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wider">ABHIYAN HUB</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase mt-0.5">Crowdfunding Local Ward Projects</p>
+        </div>
+        {!selectedCampaign && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5 self-start sm:self-center border-none"
+          >
+            <Sparkles className="h-4 w-4 text-amber-300 animate-pulse" />
+            <span>Launch New Abhiyan</span>
+          </button>
+        )}
       </div>
 
       {selectedCampaign ? (
@@ -555,6 +654,171 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
             >
               <span>Download PDF Copy</span>
             </button>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Campaign (Abhiyan) Creation Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800/80 p-6 relative overflow-hidden shadow-2xl space-y-4"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                  <Sparkles className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide">Launch New Abhiyan</h3>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase">Escrow Crowdfunded Local Resolution</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {createError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 text-rose-700 dark:text-rose-400 rounded-xl text-xs font-semibold">
+                {createError}
+              </div>
+            )}
+
+            {createSuccess && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-semibold">
+                {createSuccess}
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleCreateCampaign} className="space-y-4 text-xs">
+              {/* Title */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Abhiyan Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Repair Indiranagar 12th Main Broken Water Pipe"
+                  value={newCampTitle}
+                  onChange={(e) => setNewCampTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  required
+                />
+              </div>
+
+              {/* Category & Budget */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Category</label>
+                  <select
+                    value={newCampCategory}
+                    onChange={(e) => setNewCampCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    <option value="Drainage & Waterlogging">Drainage & Waterlogging</option>
+                    <option value="Waste Management">Waste Management</option>
+                    <option value="Broken Public Assets">Broken Public Assets</option>
+                    <option value="Roads & Footpaths">Roads & Footpaths</option>
+                    <option value="Safety & Lighting">Safety & Lighting</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Target Funding Goal (₹)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 15000"
+                    value={newCampTarget}
+                    onChange={(e) => setNewCampTarget(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Linked Ward Issue */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Link to Citizen-Reported Ward Issue</label>
+                <select
+                  value={newCampLinkedIssues[0] || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewCampLinkedIssues(val ? [val] : []);
+                    // Auto-fill title if empty
+                    if (val && !newCampTitle) {
+                      const selected = allIssues.find(i => i.id === val);
+                      if (selected) {
+                        setNewCampTitle(`Resolve: ${selected.title}`);
+                        if (!newCampDesc) {
+                          setNewCampDesc(`Resolving citizen-reported issue ${selected.trackingId}: ${selected.description}`);
+                        }
+                      }
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="">-- Don't link (General Public Utility project) --</option>
+                  {allIssues.map((issue) => (
+                    <option key={issue.id} value={issue.id}>
+                      [{issue.trackingId}] {issue.title} ({issue.ward})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[9px] text-slate-400 font-medium">Linking to an active issue ensures backers can verify the exact spot and current status before committing capital.</p>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Plan of Execution & Scope of Work</label>
+                <textarea
+                  placeholder="Specify what work will be carried out, materials required, and vendor execution details..."
+                  value={newCampDesc}
+                  onChange={(e) => setNewCampDesc(e.target.value)}
+                  rows={4}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none leading-relaxed"
+                  required
+                />
+              </div>
+
+              {/* Escrow note */}
+              <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl space-y-1">
+                <span className="text-[9px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wide block">Safe Escrow Architecture Enabled</span>
+                <p className="text-[9px] text-indigo-600/90 dark:text-indigo-300 leading-snug">
+                  All campaign contributions are locked in a 3-stage smart escrow. If the project is not executed or failed milestone verification by citizens within 90 days, capital is auto-refunded to backers' reinvestment wallets.
+                </p>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all border-none cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCampaign}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer text-center border-none flex items-center justify-center space-x-1"
+                >
+                  {isSubmittingCampaign ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                  )}
+                  <span>Launch Abhiyan</span>
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}

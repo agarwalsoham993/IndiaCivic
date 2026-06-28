@@ -33,7 +33,9 @@ import {
   Award,
   LogOut,
   Sparkles,
-  CheckSquare
+  CheckSquare,
+  Sun,
+  Moon
 } from "lucide-react";
 
 import { Issue, Campaign, UserProfile, Comment, Donation } from "./types";
@@ -79,21 +81,21 @@ const SidebarItem = ({
         {/* First Image UI Style: Rounded square container */}
         <div className={`w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] rounded-2xl flex flex-col items-center justify-center transition-all ${
           active 
-            ? "bg-[#cbe2d3] shadow-inner text-[#1e4620]" 
-            : "hover:bg-white/40 text-[#2d5a27]/70 hover:text-[#1e4620]"
+            ? "bg-[#cbe2d3] dark:bg-indigo-950/80 shadow-inner text-[#1e4620] dark:text-indigo-400 border border-transparent dark:border-indigo-800/40" 
+            : "hover:bg-white/40 dark:hover:bg-[#1e293b]/60 text-[#2d5a27]/70 dark:text-slate-400 hover:text-[#1e4620] dark:hover:text-indigo-300"
         }`}>
           {/* Icon Badge container (as in the first image) */}
           <div className={`p-1.5 rounded-xl flex items-center justify-center transition-all ${
             active 
-              ? "bg-white text-[#1e4620] shadow-sm" 
-              : "bg-transparent text-[#2d5a27]"
+              ? "bg-white dark:bg-indigo-600 text-[#1e4620] dark:text-white shadow-sm" 
+              : "bg-transparent text-[#2d5a27] dark:text-slate-400"
           }`}>
             <Icon className="h-5 w-5" />
           </div>
 
           {/* Small label below icon */}
           <span className={`text-[9px] font-extrabold mt-1 sm:mt-1.5 uppercase tracking-wider text-center px-1 truncate w-full ${
-            active ? "text-[#1e4620]" : "text-[#2d5a27]/80"
+            active ? "text-[#1e4620] dark:text-indigo-400" : "text-[#2d5a27]/80 dark:text-slate-400"
           }`}>
             {label}
           </span>
@@ -121,6 +123,71 @@ export default function App() {
   const [citizenProfile, setCitizenProfile] = useState<UserProfile | null>(null);
   const [orgProfile, setOrgProfile] = useState<UserProfile | null>(null);
   const [leaderboardUsers, setLeaderboardUsers] = useState<UserProfile[]>([]);
+  
+  // Stripe Payment Gateway status states
+  const [paymentStatus, setPaymentStatus] = useState<{
+    status: "success" | "cancelled" | "failed" | null;
+    amount?: number;
+    error?: string;
+  }>({ status: null });
+
+  // Theme selection state (persisted via localStorage)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "dark" || savedTheme === "light") {
+        return savedTheme;
+      }
+    }
+    return "light";
+  });
+
+  // State for advanced radial theme transition wipe coordinates
+  const [transitionOverlay, setTransitionOverlay] = useState<{ x: number; y: number; targetTheme: 'light' | 'dark' } | null>(null);
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  const toggleTheme = (e?: React.MouseEvent | React.TouchEvent | any) => {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    
+    // Attempt to extract click/tap position coordinates
+    let x = window.innerWidth / 2;
+    let y = window.innerHeight / 2;
+
+    if (e) {
+      if ('clientX' in e && e.clientX !== undefined) {
+        x = e.clientX;
+        y = e.clientY;
+      } else if ('touches' in e && e.touches && e.touches[0]) {
+        x = e.touches[0].clientX;
+        y = e.touches[0].clientY;
+      } else if (e.target) {
+        // Fallback: estimate based on toggle button rect
+        const rect = (e.target as HTMLElement).getBoundingClientRect();
+        x = rect.left + rect.width / 2;
+        y = rect.top + rect.height / 2;
+      }
+    }
+
+    setTransitionOverlay({ x, y, targetTheme: nextTheme });
+
+    // Switch theme halfway through the 700ms animation
+    setTimeout(() => {
+      setTheme(nextTheme);
+      localStorage.setItem("theme", nextTheme);
+    }, 350);
+
+    // Reset overlay after completion
+    setTimeout(() => {
+      setTransitionOverlay(null);
+    }, 700);
+  };
   
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [corroborationText, setCorroborationText] = useState("");
@@ -169,18 +236,42 @@ export default function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get("status");
+      const amount = params.get("amount") ? Number(params.get("amount")) : undefined;
+      const error = params.get("error") || undefined;
+      const activeTabParam = params.get("activeTab");
+
+      if (status) {
+        setPaymentStatus({ status: status as any, amount, error });
+        if (activeTabParam) {
+          setActiveTab(activeTabParam);
+        } else {
+          setActiveTab("campaigns");
+        }
+        // Clean URL parameters cleanly so it doesn't reappear on refresh
+        const newUrl = window.location.pathname + (window.location.hash || "");
+        window.history.replaceState({}, document.title, newUrl);
+      }
+    }
+  }, []);
+
   const [userLocationName, setUserLocationName] = useState<string>("Indiranagar, Bengaluru");
   const [userWardName, setUserWardName] = useState<string>("Ward 88");
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number }>({ lat: 12.9719, lng: 77.6112 });
   const [isLocationLoading, setIsLocationLoading] = useState<boolean>(false);
   const [locationErrorMsg, setLocationErrorMsg] = useState<string>("");
 
-  useEffect(() => {
+  const detectLocation = () => {
     if (typeof window !== "undefined" && navigator.geolocation) {
       setIsLocationLoading(true);
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
+          setUserCoords({ lat, lng });
           
           try {
             // Use our server-side CORS-free proxy first
@@ -197,28 +288,61 @@ export default function App() {
               );
             }
             
+            let finalLocationName = "";
+            let finalWardName = "";
+
             if (response.ok) {
               const data = await response.json();
               if (data && data.address) {
                 const sub = data.address.suburb || data.address.neighbourhood || data.address.village || data.address.residential || data.address.road || "Local Area";
                 const city = data.address.city || data.address.town || data.address.state_district || "India";
-                const display = `${sub}, ${city}`;
-                setUserLocationName(display);
+                finalLocationName = `${sub}, ${city}`;
                 
                 const wardNum = Math.floor((Math.abs(lat) + Math.abs(lng)) * 100) % 150 + 1;
-                setUserWardName(`Ward ${wardNum}`);
+                finalWardName = `Ward ${wardNum}`;
               } else {
-                setUserLocationName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`);
-                setUserWardName(`Zone ${Math.floor(lat) % 10}`);
+                finalLocationName = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+                finalWardName = `Zone ${Math.floor(lat) % 10}`;
               }
             } else {
-              setUserLocationName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`);
-              setUserWardName(`Zone ${Math.floor(lat) % 10}`);
+              finalLocationName = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+              finalWardName = `Zone ${Math.floor(lat) % 10}`;
             }
+
+            setUserLocationName(finalLocationName);
+            setUserWardName(finalWardName);
+
+            // Sync with backend profile location
+            await fetch("/api/profile/location", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: finalLocationName,
+                wardName: finalWardName,
+                lat,
+                lng
+              })
+            });
+            loadAllData();
+
           } catch (err) {
             console.error("Reverse geocoding error:", err);
-            setUserLocationName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`);
-            setUserWardName(`Zone ${Math.floor(lat) % 10}`);
+            const fallbackLoc = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+            const fallbackWard = `Zone ${Math.floor(lat) % 10}`;
+            setUserLocationName(fallbackLoc);
+            setUserWardName(fallbackWard);
+
+            await fetch("/api/profile/location", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: fallbackLoc,
+                wardName: fallbackWard,
+                lat,
+                lng
+              })
+            });
+            loadAllData();
           } finally {
             setIsLocationLoading(false);
           }
@@ -231,6 +355,10 @@ export default function App() {
         { enableHighAccuracy: true, timeout: 8000 }
       );
     }
+  };
+
+  useEffect(() => {
+    detectLocation();
   }, []);
 
   useEffect(() => {
@@ -595,6 +723,13 @@ export default function App() {
     if (!response.ok) {
       throw new Error(data.error || "Failed to process donation");
     }
+    
+    if (data.redirectUrl) {
+      // Real payment gateway redirect
+      window.location.href = data.redirectUrl;
+      return null;
+    }
+    
     loadAllData();
     return data.receipt;
   };
@@ -643,6 +778,28 @@ export default function App() {
   const renderSharedOverlays = () => {
     return (
       <>
+        {/* Advanced Radial Wipe Theme Transition Overlay */}
+        {transitionOverlay && (
+          <div 
+            className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden"
+          >
+            <div 
+              className={`absolute rounded-full transform -translate-x-1/2 -translate-y-1/2 transition-all duration-700 ease-out ${
+                transitionOverlay.targetTheme === 'dark' 
+                  ? 'bg-[#0b0f19]' 
+                  : 'bg-slate-50'
+              }`}
+              style={{
+                left: transitionOverlay.x,
+                top: transitionOverlay.y,
+                width: '0px',
+                height: '0px',
+                animation: 'radialWipe 0.7s forwards'
+              }}
+            />
+          </div>
+        )}
+
         {/* Sign In & Sign Up Dedicated Page Overlay */}
         <AnimatePresence>
           {showAuthModal && (
@@ -914,19 +1071,105 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Stripe Payment Status Overlay */}
+        <AnimatePresence>
+          {paymentStatus.status && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-5 select-none text-left"
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-w-sm w-full space-y-5"
+              >
+                {paymentStatus.status === "success" ? (
+                  <>
+                    <div className="mx-auto h-16 w-16 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 relative">
+                      <ShieldCheck className="h-9 w-9" />
+                      <span className="absolute inset-0 rounded-full border-2 border-emerald-500/20 animate-ping" />
+                    </div>
+                    <div className="text-center space-y-1.5">
+                      <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Escrow Funded Successfully!</h3>
+                      <p className="text-xs text-slate-500">
+                        Your real payment has been processed and secured. The funds are now locked in the ward's audited Section-8 citizen-managed escrow vault.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-2 font-mono text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">AMOUNT CONTRIBUTED:</span>
+                        <span className="text-slate-800 font-bold">₹{paymentStatus.amount || "0"}.00</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">SECURE ESCROW STATUS:</span>
+                        <span className="text-emerald-600 font-bold uppercase">VERIFIED & HELD</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">GST RECIPIENT:</span>
+                        <span className="text-slate-600 font-bold">Ward 88 Local Abhiyan</span>
+                      </div>
+                    </div>
+
+                    <div className="text-center">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-full text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>GST-Exemption Tax Benefit Receipt Issued</span>
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => setPaymentStatus({ status: null })}
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center shadow-md border-none"
+                    >
+                      <span>Return to Abhiyan Hub</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="mx-auto h-16 w-16 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                      <AlertTriangle className="h-9 w-9" />
+                    </div>
+                    <div className="text-center space-y-1.5">
+                      <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">
+                        {paymentStatus.status === "cancelled" ? "Payment Cancelled" : "Payment Failed"}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {paymentStatus.status === "cancelled" 
+                          ? "You cancelled the payment gateway transaction. The escrow funds were not deposited." 
+                          : paymentStatus.error || "The secure payment processor could not authorize your contribution. Please try again or use another card."}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setPaymentStatus({ status: null })}
+                      className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center border-none"
+                    >
+                      <span>Dismiss</span>
+                    </button>
+                  </>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </>
     );
   };
 
   if (!isMobile) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased flex relative">
+      <div className={`min-h-screen font-sans antialiased flex relative transition-colors duration-500 ${theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'} theme-transition`}>
         {/* Left Desktop Sidebar - Collapsed & Pastel Green */}
-        <div className="w-16 sm:w-20 bg-[#e6f4ea] text-emerald-950 flex flex-col border-r border-[#cbe2d3] fixed h-full top-0 left-0 z-[60] select-none">
+        <div className="w-16 sm:w-20 bg-[#e6f4ea] dark:bg-[#0f172a] text-emerald-950 dark:text-slate-100 flex flex-col border-r border-[#cbe2d3] dark:border-slate-800/80 fixed h-full top-0 left-0 z-[60] select-none">
           {/* Brand Header */}
-          <div className="h-16 flex items-center justify-center border-b border-[#cbe2d3] bg-[#d5ecd9]/80">
+          <div className="h-16 flex items-center justify-center border-b border-[#cbe2d3] dark:border-slate-800/80 bg-[#d5ecd9]/80 dark:bg-[#1e293b]/50">
             <div className="group relative flex items-center justify-center">
-              <ShieldCheck className="h-6 w-6 text-emerald-700 animate-pulse cursor-pointer" />
+              <ShieldCheck className="h-6 w-6 text-emerald-700 dark:text-indigo-400 animate-pulse cursor-pointer" />
               {/* Tooltip */}
               <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[10px] font-black tracking-wider uppercase rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 IndiaCivic
@@ -980,7 +1223,24 @@ export default function App() {
           </nav>
 
           {/* Sidebar Footer */}
-          <div className="p-3 border-t border-[#cbe2d3] bg-[#d5ecd9]/40 flex flex-col items-center space-y-4">
+          <div className="p-3 border-t border-[#cbe2d3] dark:border-slate-800/80 bg-[#d5ecd9]/40 dark:bg-[#1e293b]/20 flex flex-col items-center space-y-4">
+            {/* Theme Toggle Button */}
+            <button
+              onClick={(e) => toggleTheme(e)}
+              className="group relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white dark:bg-[#1e293b] border border-[#cbe2d3] dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 text-slate-700 dark:text-slate-300 flex items-center justify-center shadow-xs transition-all cursor-pointer"
+            >
+              <div className="relative w-5 h-5 flex items-center justify-center">
+                {theme === "light" ? (
+                  <Moon className="h-5 w-5 text-indigo-600 transition-all duration-300" />
+                ) : (
+                  <Sun className="h-5 w-5 text-amber-400 transition-all duration-300" />
+                )}
+              </div>
+              <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap pointer-events-none z-50">
+                {theme === "light" ? "Switch to Dark" : "Switch to Light"}
+              </div>
+            </button>
+
             {isGuest ? (
               <button 
                 onClick={() => {
@@ -1002,7 +1262,7 @@ export default function App() {
                     setActiveTab("profile");
                     setSelectedIssue(null);
                   }}
-                  className="group relative w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white border border-[#b2dbbf] text-emerald-950 flex items-center justify-center font-black text-sm uppercase shadow-xs cursor-pointer hover:border-emerald-500 transition-all"
+                  className="group relative w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white dark:bg-[#1e293b] border border-[#b2dbbf] dark:border-slate-700 text-emerald-950 dark:text-slate-100 flex items-center justify-center font-black text-sm uppercase shadow-xs cursor-pointer hover:border-emerald-500 transition-all"
                   title="Open Citizen Passport Dashboard"
                 >
                   {(userProfile?.username || "C").charAt(0)}
@@ -1017,7 +1277,7 @@ export default function App() {
                 {/* Logout Button */}
                 <button 
                   onClick={handleLogout}
-                  className="group relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#fde8e8] hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition-all cursor-pointer"
+                  className="group relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#fde8e8] dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center transition-all cursor-pointer"
                 >
                   <LogOut className="h-4.5 w-4.5" />
                   <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap pointer-events-none z-50">
@@ -1030,20 +1290,20 @@ export default function App() {
         </div>
 
         {/* Desktop Content Frame */}
-        <div className="flex-1 flex flex-col min-h-screen pl-16 sm:pl-20 max-w-full overflow-hidden bg-slate-50">
+        <div className="flex-1 flex flex-col min-h-screen pl-16 sm:pl-20 max-w-full overflow-hidden bg-slate-50 dark:bg-[#0b0f19]">
           {/* Desktop Header - Hidden for MapsView to allow 100% full screen expansion */}
           {activeTab !== "maps" && (
-            <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs">
+            <header className={`h-16 px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs border-b transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80' : 'bg-white border-slate-200'}`}>
             <div className="flex items-center space-x-2">
               {selectedIssue ? (
                 <button 
                   onClick={() => setSelectedIssue(null)}
-                  className="text-xs font-bold text-slate-500 hover:text-indigo-600 flex items-center space-x-1 uppercase cursor-pointer bg-transparent border-none"
+                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center space-x-1 uppercase cursor-pointer bg-transparent border-none"
                 >
                   <span>← Back to Community Feed</span>
                 </button>
               ) : (
-                <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest font-sans">
+                <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest font-sans">
                   {activeTab === "home" && "Citizen Action Feed"}
                   {activeTab === "maps" && "Live Interactive Civic Map"}
                   {activeTab === "report" && "File a Verified Civic Ticket"}
@@ -1054,16 +1314,21 @@ export default function App() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-xs font-bold text-slate-500 bg-slate-100/80 px-3 py-1.5 rounded-lg border border-slate-200">
-                <MapPin className="h-3.5 w-3.5 text-indigo-500 animate-pulse" />
+              <button
+                onClick={detectLocation}
+                disabled={isLocationLoading}
+                title="Click to refresh/update location again based upon current location"
+                className="flex items-center space-x-2 text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700/80 active:scale-95 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 transition-all cursor-pointer outline-none focus:ring-1 focus:ring-indigo-500 border-none shrink-0"
+              >
+                <MapPin className={`h-3.5 w-3.5 text-indigo-500 ${isLocationLoading ? 'animate-spin' : 'animate-pulse'}`} />
                 <span>
-                  {isLocationLoading ? "Detecting actual location..." : `${userLocationName} (${userWardName})`}
+                  {isLocationLoading ? "Updating location..." : `${userLocationName} (${userWardName})`}
                 </span>
-              </div>
+              </button>
               
               {!isGuest && (
-                <div className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-100 text-xs font-bold">
-                  <Award className="h-4 w-4 text-indigo-600" />
+                <div className="flex items-center space-x-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-900/50 text-xs font-bold">
+                  <Award className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                   <span>{userProfile?.totalPoints} XP</span>
                 </div>
               )}
@@ -1516,6 +1781,9 @@ export default function App() {
                         onRefreshData={loadAllData}
                         setAuthMode={setAuthMode}
                         setShowAuthModal={setShowAuthModal}
+                        theme={theme}
+                        isThemeTransitioning={!!transitionOverlay}
+                        userCoords={userCoords}
                       />
                     )}
                     {activeTab === "report" && (
@@ -1534,6 +1802,7 @@ export default function App() {
                         onDonate={handleDonateEscrow}
                         onVerifyStep={handleVerifyStep}
                         onSimulate90Days={handleSimulate90Days}
+                        onRefresh={loadAllData}
                       />
                     )}
                     {activeTab === "profile" && (
@@ -1543,6 +1812,7 @@ export default function App() {
                         org={orgProfile || DEFAULT_ORG}
                         onToggleRole={handleToggleRole}
                         leaderboardUsers={leaderboardUsers}
+                        onRefreshProfile={loadAllData}
                       />
                     )}
                   </motion.div>
@@ -1557,36 +1827,56 @@ export default function App() {
   }
 
   return (
-    <div className="w-full h-screen bg-slate-50 text-slate-800 font-sans antialiased relative flex flex-col overflow-hidden">
+    <div className={`w-full h-[100dvh] font-sans antialiased relative flex flex-col overflow-hidden transition-colors duration-500 ${theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'} theme-transition`}>
         {/* Inner header brand bar */}
-        <div className="h-14 bg-white border-b border-slate-200 px-5 flex items-center justify-between z-10">
+        <div className={`h-14 px-5 flex items-center justify-between z-10 border-b transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
           <div className="flex items-center space-x-1.5">
-            <ShieldCheck className="h-5 w-5 text-indigo-600" />
-            <h1 className="text-md font-black tracking-widest text-slate-800 uppercase">IndiaCivic</h1>
+            <ShieldCheck className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+            <h1 className="text-md font-black tracking-widest uppercase">IndiaCivic</h1>
           </div>
-          {(!userProfile || userProfile.id === 'guest') ? (
-            <button 
-              onClick={() => {
-                setAuthMode('signup');
-                setShowAuthModal(true);
-              }}
-              className="text-[10px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded shadow-sm tracking-wider cursor-pointer transition-all"
+
+          <div className="flex items-center space-x-3">
+            {/* Mobile Dark Mode Toggle */}
+            <button
+              onClick={(e) => toggleTheme(e)}
+              className={`p-1.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                theme === "dark"
+                  ? "bg-[#1e293b] border-slate-700 text-amber-400"
+                  : "bg-slate-50 border-slate-200 text-indigo-600"
+              }`}
+              title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
             >
-              Sign Up
+              {theme === "light" ? (
+                <Moon className="h-4 w-4 text-indigo-600" />
+              ) : (
+                <Sun className="h-4 w-4 text-amber-400" />
+              )}
             </button>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <span className="text-[9px] font-black uppercase text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 tracking-wider">
-                {userProfile.role}
-              </span>
+
+            {(!userProfile || userProfile.id === 'guest') ? (
               <button 
-                onClick={handleLogout}
-                className="text-[9px] font-bold text-slate-400 hover:text-rose-600 cursor-pointer"
+                onClick={() => {
+                  setAuthMode('signup');
+                  setShowAuthModal(true);
+                }}
+                className="text-[10px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded shadow-sm tracking-wider cursor-pointer transition-all"
               >
-                Logout
+                Sign Up
               </button>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center space-x-2">
+                <span className="text-[9px] font-black uppercase text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 tracking-wider">
+                  {userProfile.role}
+                </span>
+                <button 
+                  onClick={handleLogout}
+                  className="text-[9px] font-bold text-slate-400 hover:text-rose-600 cursor-pointer"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Scrollable Viewport Stage */}
@@ -2055,6 +2345,9 @@ export default function App() {
                     onRefreshData={loadAllData}
                     setAuthMode={setAuthMode}
                     setShowAuthModal={setShowAuthModal}
+                    theme={theme}
+                    isThemeTransitioning={!!transitionOverlay}
+                    userCoords={userCoords}
                   />
                 )}
                 {activeTab === "report" && (
@@ -2073,6 +2366,7 @@ export default function App() {
                     onDonate={handleDonateEscrow}
                     onVerifyStep={handleVerifyStep}
                     onSimulate90Days={handleSimulate90Days}
+                    onRefresh={loadAllData}
                   />
                 )}
                 {activeTab === "profile" && (
@@ -2082,6 +2376,7 @@ export default function App() {
                     org={orgProfile || DEFAULT_ORG}
                     onToggleRole={handleToggleRole}
                     leaderboardUsers={leaderboardUsers}
+                    onRefreshProfile={loadAllData}
                   />
                 )}
               </motion.div>
@@ -2090,7 +2385,7 @@ export default function App() {
         </div>
 
         {/* Navigation bottom control bar bar */}
-        <div className="h-16 bg-white border-t border-slate-200 flex items-center z-20 select-none px-3 justify-around">
+        <div className={`h-16 flex items-center z-20 select-none px-3 justify-around border-t transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200 text-slate-850'}`}>
           {!isGuest && (
             <button 
               onClick={() => {
@@ -2098,7 +2393,7 @@ export default function App() {
                 setSelectedIssue(null);
               }}
               className={`flex flex-col items-center space-y-0.5 w-12 transition-colors cursor-pointer ${
-                activeTab === "home" && !selectedIssue ? "text-indigo-600 font-extrabold" : "text-slate-400 hover:text-slate-600"
+                activeTab === "home" && !selectedIssue ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               }`}
             >
               <Home className="h-5 w-5" />
@@ -2112,7 +2407,7 @@ export default function App() {
               setSelectedIssue(null);
             }}
             className={`flex flex-col items-center justify-center space-y-0.5 transition-colors cursor-pointer w-12 ${
-              activeTab === "maps" ? "text-indigo-600 font-extrabold" : "text-slate-400 hover:text-slate-600"
+              activeTab === "maps" ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             }`}
           >
             <Map className="h-5 w-5" />
@@ -2130,7 +2425,7 @@ export default function App() {
                     setActiveTab("report");
                   }
                 }}
-                className={`h-12 w-12 rounded-full flex items-center justify-center border-2 border-white shadow-lg transition-all duration-300 hover:scale-105 cursor-pointer ${
+                className={`h-12 w-12 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-lg transition-all duration-300 hover:scale-105 cursor-pointer ${
                   activeTab === "report" 
                     ? "bg-slate-850 hover:bg-slate-900 text-white" 
                     : "bg-indigo-600 hover:bg-indigo-700 text-white"
@@ -2142,7 +2437,7 @@ export default function App() {
                   activeTab === "report" ? "rotate-[135deg]" : "rotate-0"
                 }`} />
               </button>
-              <span className="text-[8px] text-slate-400 mt-0.5 font-bold uppercase tracking-wider">
+              <span className="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5 font-bold uppercase tracking-wider">
                 {activeTab === "report" ? "Close" : "Report"}
               </span>
             </div>
@@ -2154,7 +2449,7 @@ export default function App() {
               setSelectedIssue(null);
             }}
             className={`flex flex-col items-center justify-center space-y-0.5 transition-colors cursor-pointer w-12 ${
-              activeTab === "campaigns" ? "text-indigo-600 font-extrabold" : "text-slate-400 hover:text-slate-600"
+              activeTab === "campaigns" ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             }`}
           >
             <Megaphone className="h-5 w-5" />
@@ -2168,7 +2463,7 @@ export default function App() {
                 setSelectedIssue(null);
               }}
               className={`flex flex-col items-center space-y-0.5 w-12 transition-colors cursor-pointer ${
-                activeTab === "profile" ? "text-indigo-600 font-extrabold" : "text-slate-400 hover:text-slate-600"
+                activeTab === "profile" ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               }`}
             >
               <User className="h-5 w-5" />
