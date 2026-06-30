@@ -1393,7 +1393,7 @@ export default function App() {
                   </h3>
                   <button 
                     onClick={() => setShowUpvoteProofModal(false)}
-                    className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
+                    className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -2809,7 +2809,7 @@ export default function App() {
         </div>
 
         {/* Navigation bottom control bar bar */}
-        <div className={`h-16 flex items-center z-20 select-none px-3 justify-around border-t transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200 text-slate-850'}`}>
+        <div className={`h-16 flex items-center z-20 select-none px-3 justify-around border-t transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
           {!isGuest && (
             <button 
               onClick={() => {
@@ -2851,7 +2851,7 @@ export default function App() {
                 }}
                 className={`h-12 w-12 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-lg transition-all duration-300 hover:scale-105 cursor-pointer ${
                   activeTab === "report" 
-                    ? "bg-slate-850 hover:bg-slate-900 text-white" 
+                    ? "bg-slate-800 dark:bg-slate-950 hover:bg-slate-900 dark:hover:bg-black text-white" 
                     : "bg-indigo-600 hover:bg-indigo-700 text-white"
                 }`}
                 title={activeTab === "report" ? "Close / Cancel" : "Report Issue"}

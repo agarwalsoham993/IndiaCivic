@@ -536,7 +536,7 @@ export default function ProfileView({
       {profileTab === "settings" ? (
         // ACCOUNT SETTINGS VIEW WITH OPTION TO CONVERT ACCOUNT TYPES
         <div className="space-y-6">
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 p-6 sm:p-8 space-y-6 shadow-lg relative overflow-hidden">
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-6 shadow-lg relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" />
             
             <div>
@@ -545,7 +545,7 @@ export default function ProfileView({
             </div>
 
             {/* Profile Avatar & Info Card */}
-            <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-850/40 border border-slate-200 dark:border-slate-800/80">
+            <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80">
               <img 
                 src={user.avatar || undefined} 
                 alt={user.name}
@@ -564,7 +564,7 @@ export default function ProfileView({
             </div>
 
             {/* Unified Location Settings Card */}
-            <div className="space-y-3.5 p-5 rounded-2xl bg-slate-50 dark:bg-slate-850/40 border border-slate-200 dark:border-slate-800/80">
+            <div className="space-y-3.5 p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <MapPin className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -1201,7 +1201,7 @@ export default function ProfileView({
           >
             <button 
               onClick={() => setShowShareModal(false)}
-              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-850 dark:text-slate-200 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
+              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 dark:text-slate-200 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
             >
               <X className="h-4.5 w-4.5" />
             </button>

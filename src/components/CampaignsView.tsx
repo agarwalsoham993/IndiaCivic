@@ -250,7 +250,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">{selectedCampaign.description}</p>
 
             {/* Escrow wallet tracking progress */}
-            <div className="bg-slate-50 dark:bg-slate-850/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3.5 shadow-sm">
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3.5 shadow-sm">
               <div className="flex justify-between text-xs">
                 <div>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">ESCROW WALLET FUNDS LOCK</span>
@@ -314,7 +314,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
               {/* Action Panels depending on active verification step */}
               {selectedCampaign.verificationStep === 2 && (
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
                   <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase">Resolver: Submit Completion Proof</h5>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400">Upload before/after photo + video walk-proof of completed potholes/lighting road repairs to unlock neighbor voting.</p>
                   <button
@@ -327,7 +327,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
               )}
 
               {selectedCampaign.verificationStep === 3 && selectedCampaign.status !== "RESOLVED" && (
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 space-y-3">
                   <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase flex items-center">
                     <PlayCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mr-1.5" />
                     Public Verification Voting Active
@@ -362,7 +362,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
             {/* Donation crowdfunding card input */}
             {selectedCampaign.status === "FUNDRAISING" && (
-              <div className="bg-slate-50 dark:bg-slate-850/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+              <div className="bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider flex items-center">
                   <Heart className="h-3.5 w-3.5 text-rose-500 mr-1.5" /> Contribute Crowdfund Escrow
                 </h4>
@@ -455,7 +455,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
             {/* Simulated 90-days Auto-Refund option */}
             {selectedCampaign.status !== "RESOLVED" && selectedCampaign.status !== "REFUNDED" && (
-              <div className="pt-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="pt-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <div>
                   <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase">Simulate 90 Days Elapsing</h5>
                   <p className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold">Triggers auto-return of idle escrow funds directly to donor wallets.</p>
@@ -546,7 +546,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                 key={camp.id}
                 layoutId={`camp-card-${camp.id}`}
                 onClick={() => setSelectedCampaign(camp)}
-                className="group p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-850/60 transition-all duration-300 cursor-pointer relative shadow-sm hover:shadow-md text-left"
+                className="group p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-300 cursor-pointer relative shadow-sm hover:shadow-md text-left"
               >
                 <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                   <span>ESCROW ID: #{camp.id}</span>
@@ -602,7 +602,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
           >
             <button 
               onClick={() => setSelectedReceipt(null)}
-              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
+              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
             >
               <X className="h-4.5 w-4.5" />
             </button>

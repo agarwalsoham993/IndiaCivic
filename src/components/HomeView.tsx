@@ -360,7 +360,7 @@ export default function HomeView({
                     </div>
 
                     {/* Footer actions bar */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-850/60 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
                       <div className="flex items-center space-x-4">
                         <button 
                           onClick={(e) => {
@@ -437,11 +437,11 @@ export default function HomeView({
             </div>
 
             <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <div className="bg-slate-50 dark:bg-slate-850/60 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-800">
+              <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-800">
                 <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">ACTIVE ISSUES</div>
                 <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-0.5 leading-tight">{openWardIssues.length} Open in {currentWardName || "your ward"}</div>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-850/60 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-800">
+              <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-800">
                 <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">YOUR ACTIVE RANK</div>
                 <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-0.5 font-sans leading-tight">#12 in {currentWardName || "Ward 88"}</div>
               </div>

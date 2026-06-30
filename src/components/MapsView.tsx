@@ -2746,7 +2746,7 @@ export default function MapsView({
                         setSelectedCluster(null);
                         setIsResolving(false);
                       }}
-                      className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-850 rounded-full transition-colors shrink-0 ml-2 cursor-pointer bg-transparent border-none flex items-center justify-center"
+                      className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-full transition-colors shrink-0 ml-2 cursor-pointer bg-transparent border-none flex items-center justify-center"
                     >
                       <X className="h-4 w-4" style={{ color: "#334155" }} />
                     </button>
@@ -3460,7 +3460,7 @@ export default function MapsView({
             >
               <button 
                 onClick={() => setIsQRModalOpen(false)}
-                className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-850 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
+                className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-full transition-colors cursor-pointer bg-transparent border-none flex items-center justify-center"
               >
                 <X className="h-4.5 w-4.5" />
               </button>
