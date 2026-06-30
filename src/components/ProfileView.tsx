@@ -140,18 +140,20 @@ export default function ProfileView({
   const [govtIdType, setGovtIdType] = useState("VOTER_ID");
   const [orgRegistrationNum, setOrgRegistrationNum] = useState("");
   const [orgTaxExemptNum, setOrgTaxExemptNum] = useState("");
+  const [verificationError, setVerificationError] = useState("");
   
   // Persistence of local verification status in localStorage
   const [isCitizenVerified, setIsCitizenVerified] = useState(false);
   const [isOrgVerified, setIsOrgVerified] = useState(false);
 
   useEffect(() => {
-    // Read cached verification status
-    const civVerified = localStorage.getItem(`verified_citizen_${user.id}`) === "true";
-    const firmVerified = localStorage.getItem(`verified_org_${user.id}`) === "true";
+    // Read cached or database verification status
+    const isDbVerified = !!user.isVerified;
+    const civVerified = (user.role === "CITIZEN" && isDbVerified) || localStorage.getItem(`verified_citizen_${user.id}`) === "true";
+    const firmVerified = (user.role === "ORGANIZATION" && isDbVerified) || localStorage.getItem(`verified_org_${user.id}`) === "true";
     setIsCitizenVerified(civVerified);
     setIsOrgVerified(firmVerified);
-  }, [user.id]);
+  }, [user.id, user.isVerified, user.role]);
 
   const handleOpenLocationModal = () => {
     setLocationQuery(user.location || "Indiranagar, Bengaluru");
@@ -307,22 +309,47 @@ export default function ProfileView({
     setVerificationStep(2);
   };
 
-  const submitVerificationDetails = () => {
+  const submitVerificationDetails = async () => {
     setVerificationStep(3);
-    // Simulate smart verification network check
-    setTimeout(() => {
-      setVerificationStep(4);
-      if (user.role === "CITIZEN") {
-        setIsCitizenVerified(true);
-        localStorage.setItem(`verified_citizen_${user.id}`, "true");
+    setVerificationError("");
+
+    const documentId = user.role === "CITIZEN" ? voterCardNum : orgRegistrationNum;
+    const verificationType = user.role === "CITIZEN" ? govtIdType : "GSTIN";
+
+    try {
+      const response = await fetch("/api/profile/verify-identity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          verificationType,
+          documentId
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setVerificationStep(4);
+        if (user.role === "CITIZEN") {
+          setIsCitizenVerified(true);
+          localStorage.setItem(`verified_citizen_${user.id}`, "true");
+        } else {
+          setIsOrgVerified(true);
+          localStorage.setItem(`verified_org_${user.id}`, "true");
+        }
+        if (onRefreshProfile) {
+          onRefreshProfile();
+        }
       } else {
-        setIsOrgVerified(true);
-        localStorage.setItem(`verified_org_${user.id}`, "true");
+        setVerificationError(data.error || "Verification failed. Please check document format.");
+        setVerificationStep(2);
       }
-      if (onRefreshProfile) {
-        onRefreshProfile();
-      }
-    }, 2500);
+    } catch (err: any) {
+      console.error("Verification API Error:", err);
+      setVerificationError("Network error occurred during verification. Try again.");
+      setVerificationStep(2);
+    }
   };
 
   // Determine if database leaderboard data is loaded
@@ -1226,6 +1253,11 @@ export default function ProfileView({
             {/* Step 2: Upload / Form Submission */}
             {verificationStep === 2 && (
               <div className="space-y-4 text-xs">
+                {verificationError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-semibold leading-relaxed shadow-sm">
+                    {verificationError}
+                  </div>
+                )}
                 {user.role === "CITIZEN" ? (
                   // Citizen Form
                   <div className="space-y-3">

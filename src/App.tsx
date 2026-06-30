@@ -45,17 +45,21 @@ import ReportView from "./components/ReportView";
 import CampaignsView from "./components/CampaignsView";
 import ProfileView from "./components/ProfileView";
 import NotificationDrawer from "./components/NotificationDrawer";
+import OnboardingWizard from "./components/OnboardingWizard";
 
 // Firebase Auth & Config
 import { auth, db as firestoreDb } from "./lib/firebase";
-import { collection, doc, onSnapshot, query, orderBy, limit, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, orderBy, limit, writeBatch, getDoc } from "firebase/firestore";
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  updateProfile,
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from "firebase/auth";
 
 const SidebarItem = ({ 
@@ -223,8 +227,15 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
-  const [authError, setAuthError] = useState("");
+  const [authDisplayName, setAuthDisplayName] = useState("");
+  const [authStep, setAuthStep] = useState<string>("form");
+  const [authInfo, setAuthInfo] = useState<string>("");
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState<boolean>(false);
+  const [onboardingUid, setOnboardingUid] = useState<string>("");
+  const [onboardingEmail, setOnboardingEmail] = useState<string>("");
+  const [onboardingName, setOnboardingName] = useState<string>("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [signUpRole, setSignUpRole] = useState<'CITIZEN' | 'ORGANIZATION'>('CITIZEN');
 
   // WhatsApp integration states
@@ -548,21 +559,31 @@ export default function App() {
       if (firebaseUser) {
         console.log("Firebase Auth User state changed: LOGGED IN", firebaseUser.email);
         try {
-          const res = await fetch("/api/profile/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              name: firebaseUser.displayName || firebaseUser.email?.split("@")[0],
-              role: signUpRole
-            })
-          });
-          const data = await res.json();
-          if (data.success) {
-            setUserProfile(data.activeUser);
-            setCitizenProfile(data.citizen);
-            setOrgProfile(data.org);
+          const profileRef = doc(firestoreDb, "profiles", firebaseUser.uid);
+          const profileSnap = await getDoc(profileRef);
+          
+          if (!profileSnap.exists()) {
+            setOnboardingUid(firebaseUser.uid);
+            setOnboardingEmail(firebaseUser.email || "");
+            setOnboardingName(firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "");
+            setShowOnboardingWizard(true);
+          } else {
+            const res = await fetch("/api/profile/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                name: firebaseUser.displayName || firebaseUser.email?.split("@")[0],
+                role: signUpRole
+              })
+            });
+            const data = await res.json();
+            if (data.success) {
+              setUserProfile(data.activeUser);
+              setCitizenProfile(data.citizen);
+              setOrgProfile(data.org);
+            }
           }
         } catch (err) {
           console.error("Error syncing authenticated user with backend:", err);
@@ -611,13 +632,30 @@ export default function App() {
     setAuthError("");
     setAuthLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-      setShowAuthModal(false);
-      setAuthEmail("");
-      setAuthPassword("");
+      const cred = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+      await updateProfile(cred.user, { displayName: authDisplayName });
+      await sendEmailVerification(cred.user); // send verification email
+      setAuthStep("verify-email"); // show "Check your inbox" screen
     } catch (err: any) {
       console.error("Firebase Sign Up Error:", err);
       setAuthError(err.message || "Failed to create account.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!authEmail) {
+      setAuthError("Enter your email address above first.");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, authEmail);
+      setAuthError(""); // clear errors
+      setAuthInfo("Password reset email sent! Check your inbox.");
+    } catch (err: any) {
+      setAuthError(err.message);
     } finally {
       setAuthLoading(false);
     }
@@ -962,6 +1000,23 @@ export default function App() {
   const renderSharedOverlays = () => {
     return (
       <>
+        {showOnboardingWizard && (
+          <OnboardingWizard
+            uid={onboardingUid}
+            email={onboardingEmail}
+            initialName={onboardingName}
+            onComplete={(profile) => {
+              setUserProfile(profile);
+              if (profile.role === 'CITIZEN') {
+                setCitizenProfile(profile);
+              } else {
+                setOrgProfile(profile);
+              }
+              setShowOnboardingWizard(false);
+              fetchLeaderboard();
+            }}
+          />
+        )}
         {/* Advanced Radial Wipe Theme Transition Overlay */}
         {transitionOverlay && (
           <div 
@@ -1013,140 +1068,299 @@ export default function App() {
 
               {/* Main Container */}
               <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full space-y-6">
-                <div className="text-center space-y-1.5">
-                  <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
-                    {authMode === 'signin' ? (
-                      <Lock className="h-5 w-5 text-indigo-600" />
-                    ) : signUpRole === 'CITIZEN' ? (
-                      <UserPlus className="h-5 w-5 text-indigo-600" />
-                    ) : (
-                      <Building className="h-5 w-5 text-indigo-600" />
+                {authStep === "verify-email" ? (
+                  <div className="text-center space-y-4 py-8">
+                    <div className="mx-auto h-14 w-14 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                      <Mail className="h-6 w-6 text-indigo-600 animate-pulse" />
+                    </div>
+                    <h3 className="text-base font-black text-slate-800 uppercase tracking-wider">
+                      Check Your Inbox
+                    </h3>
+                    <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                      We sent a verification link to <strong>{authEmail}</strong>. Click it to activate your account.
+                    </p>
+                    
+                    {authError && (
+                      <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-semibold leading-relaxed shadow-sm">
+                        {authError}
+                      </div>
                     )}
-                  </div>
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-wider">
-                    {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {authMode === 'signin' 
-                      ? 'Access your civic workspace to resume local actions' 
-                      : signUpRole === 'CITIZEN' 
-                        ? 'Join IndiaCivic as a resident and start earning rewards'
-                        : 'Register your Organization, NGO, or RWA to host campaigns'}
-                  </p>
-                </div>
+                    {authInfo && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-600 font-semibold leading-relaxed shadow-sm">
+                        {authInfo}
+                      </div>
+                    )}
 
-                {authError && (
-                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-semibold leading-relaxed shadow-sm">
-                    {authError}
+                    <button
+                      onClick={async () => {
+                        try {
+                          await auth.currentUser?.reload();
+                          if (auth.currentUser?.emailVerified) {
+                            const firebaseUser = auth.currentUser;
+                            if (firebaseUser) {
+                              const profileRef = doc(firestoreDb, "profiles", firebaseUser.uid);
+                              const profileSnap = await getDoc(profileRef);
+                              if (!profileSnap.exists()) {
+                                setOnboardingUid(firebaseUser.uid);
+                                setOnboardingEmail(firebaseUser.email || "");
+                                setOnboardingName(firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "");
+                                setShowOnboardingWizard(true);
+                              } else {
+                                const res = await fetch("/api/profile/login", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    uid: firebaseUser.uid,
+                                    email: firebaseUser.email,
+                                    name: firebaseUser.displayName || firebaseUser.email?.split("@")[0],
+                                    role: signUpRole
+                                  })
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setUserProfile(data.activeUser);
+                                  setCitizenProfile(data.citizen);
+                                  setOrgProfile(data.org);
+                                }
+                              }
+                            }
+                            setAuthStep("form");
+                            setAuthError("");
+                            setAuthInfo("");
+                            setShowAuthModal(false);
+                          } else {
+                            setAuthError("Email has not been verified yet. Check your inbox.");
+                          }
+                        } catch (err: any) {
+                          setAuthError(err.message);
+                        }
+                      }}
+                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl uppercase cursor-pointer border-none shadow-md transition-all"
+                    >
+                      I've Verified — Continue
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          if (auth.currentUser) {
+                            await sendEmailVerification(auth.currentUser);
+                            setAuthInfo("Verification email resent!");
+                            setAuthError("");
+                          }
+                        } catch (err: any) {
+                          setAuthError(err.message);
+                        }
+                      }}
+                      className="text-[11px] text-indigo-600 font-bold cursor-pointer hover:underline bg-transparent border-none block mx-auto"
+                    >
+                      Resend verification email
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthStep("form");
+                        setAuthError("");
+                        setAuthInfo("");
+                        setShowAuthModal(false);
+                      }}
+                      className="text-[11px] text-slate-400 hover:text-indigo-600 font-bold cursor-pointer bg-transparent border-none uppercase tracking-wide block mx-auto mt-2"
+                    >
+                      ← Back to Form
+                    </button>
                   </div>
-                )}
+                ) : (
+                  <>
+                    <div className="text-center space-y-1.5">
+                      <div className="mx-auto h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
+                        {authMode === 'signin' ? (
+                          <Lock className="h-5 w-5 text-indigo-600" />
+                        ) : signUpRole === 'CITIZEN' ? (
+                          <UserPlus className="h-5 w-5 text-indigo-600" />
+                        ) : (
+                          <Building className="h-5 w-5 text-indigo-600" />
+                        )}
+                      </div>
+                      <h3 className="text-lg font-black text-slate-800 uppercase tracking-wider">
+                        {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        {authMode === 'signin' 
+                          ? 'Access your civic workspace to resume local actions' 
+                          : signUpRole === 'CITIZEN' 
+                            ? 'Join IndiaCivic as a resident and start earning rewards'
+                            : 'Register your Organization, NGO, or RWA to host campaigns'}
+                      </p>
+                    </div>
 
-                <form onSubmit={authMode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
-                  {authMode === 'signup' && (
-                    <div className="space-y-4">
-                      {/* Account Type Selector */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Choose Account Type</label>
-                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => setSignUpRole('CITIZEN')}
-                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                              signUpRole === 'CITIZEN' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <User className="h-3.5 w-3.5" />
-                            <span>Citizen</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSignUpRole('ORGANIZATION')}
-                            className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                              signUpRole === 'ORGANIZATION' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <Building className="h-3.5 w-3.5" />
-                            <span>Organization</span>
-                          </button>
+                    {authError && (
+                      <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-semibold leading-relaxed shadow-sm animate-none">
+                        {authError}
+                      </div>
+                    )}
+                    {authInfo && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-600 font-semibold leading-relaxed shadow-sm animate-none">
+                        {authInfo}
+                      </div>
+                    )}
+
+                    <form onSubmit={authMode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
+                      {authMode === 'signup' && (
+                        <div className="space-y-4">
+                          {/* Account Type Selector */}
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Choose Account Type</label>
+                            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => setSignUpRole('CITIZEN')}
+                                className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                                  signUpRole === 'CITIZEN' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                              >
+                                <User className="h-3.5 w-3.5" />
+                                <span>Citizen</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSignUpRole('ORGANIZATION')}
+                                className={`py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                                  signUpRole === 'ORGANIZATION' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                              >
+                                <Building className="h-3.5 w-3.5" />
+                                <span>Organization</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Full Name capture during signup */}
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                              Full Name
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="e.g. Soham Agarwal"
+                                value={authDisplayName}
+                                onChange={(e) => setAuthDisplayName(e.target.value)}
+                                required
+                                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+                              />
+                              <User className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Email address */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Email Address</label>
+                        <div className="relative">
+                          <input 
+                            type="email"
+                            placeholder="e.g. neighbor@civic.in"
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            required
+                            className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                          />
+                          <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                         </div>
                       </div>
+
+                      {/* Password */}
+                      <div className="space-y-1 flex flex-col">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Password</label>
+                          {authMode === 'signin' && (
+                            <button
+                              type="button"
+                              onClick={handleForgotPassword}
+                              className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer bg-transparent border-none"
+                            >
+                              Forgot Password?
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative mt-1">
+                          <input 
+                            type="password"
+                            placeholder="Min. 6 characters"
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            minLength={6}
+                            className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                          />
+                          <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                        </div>
+                      </div>
+
+                      <button 
+                        type="submit"
+                        disabled={authLoading}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-bold text-xs uppercase rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-md active:scale-95"
+                      >
+                        <span>{authLoading ? 'Syncing Profile...' : (authMode === 'signin' ? 'Sign In' : 'Create Account')}</span>
+                      </button>
+
+                      <div className="relative flex py-2 items-center">
+                        <div className="flex-grow border-t border-slate-200"></div>
+                        <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold uppercase tracking-wider">or continue with</span>
+                        <div className="flex-grow border-t border-slate-200"></div>
+                      </div>
+
+                      <button 
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={authLoading}
+                        className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 disabled:opacity-50 font-bold text-xs rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24">
+                          <path fill="#EA4335" d="M12 5.04c1.65 0 3.13.57 4.3 1.69l3.21-3.21C17.55 1.77 14.99 1 12 1 7.35 1 3.37 3.67 1.39 7.56l3.85 2.99c.91-2.73 3.47-4.51 6.76-4.51z" />
+                          <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.28 1.48-1.12 2.74-2.38 3.58l3.7 2.87c2.16-2 3.71-4.94 3.71-8.6z" />
+                          <path fill="#FBBC05" d="M5.24 14.55c-.24-.72-.38-1.5-.38-2.3 0-.8.14-1.58.38-2.3L1.39 7.56C.5 9.35 0 11.37 0 12.5s.5 3.15 1.39 4.94l3.85-2.89z" />
+                          <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.11.75-2.52 1.19-4.26 1.19-3.29 0-5.85-1.78-6.76-4.51L1.39 16.9C3.37 20.33 7.35 23 12 23z" />
+                        </svg>
+                        <span>Google Account</span>
+                      </button>
+
+                      <div className="relative flex py-1 items-center">
+                        <div className="flex-grow border-t border-slate-100"></div>
+                        <span className="flex-shrink mx-2 text-slate-300 text-[9px] uppercase tracking-wider">or</span>
+                        <div className="flex-grow border-t border-slate-100"></div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAuthModal(false);
+                          setAuthError("");
+                          setAuthInfo("");
+                        }}
+                        className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold text-[11px] rounded-xl uppercase cursor-pointer border-none transition-all flex items-center justify-center space-x-1.5"
+                      >
+                        <span>Continue browsing as Guest →</span>
+                      </button>
+                    </form>
+
+                    <div className="text-center">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
+                          setAuthError("");
+                          setAuthInfo("");
+                        }}
+                        className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer bg-transparent border-none uppercase tracking-wide transition-colors"
+                      >
+                        {authMode === 'signin' ? "Don't have an account? Sign Up" : "Already registered? Sign In"}
+                      </button>
                     </div>
-                  )}
-
-                  {/* Email address */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Email Address</label>
-                    <div className="relative">
-                      <input 
-                        type="email"
-                        placeholder="e.g. neighbor@civic.in"
-                        value={authEmail}
-                        onChange={(e) => setAuthEmail(e.target.value)}
-                        required
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
-                      />
-                      <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
-
-                  {/* Password */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Password</label>
-                    <div className="relative">
-                      <input 
-                        type="password"
-                        placeholder="Min. 6 characters"
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        required
-                        minLength={6}
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
-                      />
-                      <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit"
-                    disabled={authLoading}
-                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-bold text-xs uppercase rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-md active:scale-95"
-                  >
-                    <span>{authLoading ? 'Syncing Profile...' : (authMode === 'signin' ? 'Sign In' : 'Create Account')}</span>
-                  </button>
-
-                  <div className="relative flex py-2 items-center">
-                    <div className="flex-grow border-t border-slate-200"></div>
-                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold uppercase tracking-wider">or continue with</span>
-                    <div className="flex-grow border-t border-slate-200"></div>
-                  </div>
-
-                  <button 
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={authLoading}
-                    className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 disabled:opacity-50 font-bold text-xs rounded-xl tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 shadow-sm active:scale-95"
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24">
-                      <path fill="#EA4335" d="M12 5.04c1.65 0 3.13.57 4.3 1.69l3.21-3.21C17.55 1.77 14.99 1 12 1 7.35 1 3.37 3.67 1.39 7.56l3.85 2.99c.91-2.73 3.47-4.51 6.76-4.51z" />
-                      <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.28 1.48-1.12 2.74-2.38 3.58l3.7 2.87c2.16-2 3.71-4.94 3.71-8.6z" />
-                      <path fill="#FBBC05" d="M5.24 14.55c-.24-.72-.38-1.5-.38-2.3 0-.8.14-1.58.38-2.3L1.39 7.56C.5 9.35 0 11.37 0 12.5s.5 3.15 1.39 4.94l3.85-2.89z" />
-                      <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.11.75-2.52 1.19-4.26 1.19-3.29 0-5.85-1.78-6.76-4.51L1.39 16.9C3.37 20.33 7.35 23 12 23z" />
-                    </svg>
-                    <span>Google Account</span>
-                  </button>
-                </form>
-
-                <div className="text-center">
-                  <button 
-                    onClick={() => {
-                      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
-                      setAuthError("");
-                    }}
-                    className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer bg-transparent border-none uppercase tracking-wide transition-colors"
-                  >
-                    {authMode === 'signin' ? "Don't have an account? Sign Up" : "Already registered? Sign In"}
-                  </button>
-                </div>
+                  </>
+                )}
               </div>
 
               {/* Secure footer */}

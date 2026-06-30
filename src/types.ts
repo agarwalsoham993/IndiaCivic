@@ -124,6 +124,10 @@ export interface UserProfile {
     code: string;
     expiresAt: string;
   };
+  isVerified?: boolean;
+  verifiedAt?: string;
+  verificationType?: string;
+  verifiedLegalName?: string;
 }
 
 export interface Notification {
