@@ -11,6 +11,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { z } from "zod";
 import { Issue, Campaign, UserProfile, Donation, Comment } from "./src/types";
+import twilio from "twilio";
 
 // Firebase Client SDK Imports
 import { initializeApp as initializeClientApp, getApps as getClientApps, getApp as getClientApp } from "firebase/app";
@@ -47,6 +48,7 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true }));
 
 // Initialize Firebase Client SDK
 const clientApp = getClientApps().length === 0 ? initializeClientApp(firebaseConfig) : getClientApp();
@@ -139,6 +141,8 @@ function loadLocalDatabase(): DbSchema {
     citizenProfile: DEFAULT_USER,
     orgProfile: DEFAULT_ORG,
     profiles: {},
+    whatsappConversations: {},
+    whatsappVerificationTokens: {},
   };
 }
 
@@ -682,6 +686,8 @@ interface DbSchema {
   citizenProfile: UserProfile;
   orgProfile: UserProfile;
   profiles?: { [uid: string]: UserProfile };
+  whatsappConversations?: { [phone: string]: any };
+  whatsappVerificationTokens?: { [token: string]: any };
 }
 
 async function getDb(): Promise<DbSchema> {
@@ -722,13 +728,16 @@ async function getDb(): Promise<DbSchema> {
     const citizenProfile = profilesDict["citizenProfile"] || DEFAULT_USER;
     const orgProfile = profilesDict["orgProfile"] || DEFAULT_ORG;
 
-    const data = {
+    const localDb = loadLocalDatabase();
+    const data: DbSchema = {
       issues: issuesList,
       campaigns: campaignsList,
       activeUserProfile,
       citizenProfile,
       orgProfile,
       profiles: profilesDict,
+      whatsappConversations: localDb.whatsappConversations || {},
+      whatsappVerificationTokens: localDb.whatsappVerificationTokens || {}
     };
     
     // Successfully synchronized with Firestore. Update the local file backup.
@@ -2612,286 +2621,466 @@ app.post("/api/whatsapp/merge-guest-reports", async (req, res) => {
   });
 });
 
-// 4. Primary Inbound Webhook
+// 4. Primary Inbound Webhook and WhatsApp helpers
+function normalizePhone(phone: string) {
+  if (!phone) return "";
+  let clean = phone.replace(/^whatsapp:/i, "").trim();
+  clean = clean.replace(/[^0-9+]/g, "");
+  return clean;
+}
+
+function getWhatsappConversation(targetDb: any, phone: string) {
+  if (!targetDb.whatsappConversations) {
+    targetDb.whatsappConversations = {};
+  }
+  const normalized = normalizePhone(phone);
+  return targetDb.whatsappConversations[normalized] || null;
+}
+
+function setWhatsappConversation(targetDb: any, phone: string, conversation: any) {
+  const normalized = normalizePhone(phone);
+  if (!targetDb.whatsappConversations) {
+    targetDb.whatsappConversations = {};
+  }
+  targetDb.whatsappConversations[normalized] = conversation;
+}
+
+function clearWhatsappConversation(targetDb: any, phone: string) {
+  const normalized = normalizePhone(phone);
+  if (targetDb.whatsappConversations) {
+    delete targetDb.whatsappConversations[normalized];
+  }
+}
+
+function pruneWhatsappConversations(targetDb: any) {
+  const now = Date.now();
+  const sessions = targetDb.whatsappConversations || {};
+  for (const phone of Object.keys(sessions)) {
+    const session = sessions[phone];
+    if (new Date(session.updatedAt).getTime() + 10 * 60 * 1000 < now) {
+      delete sessions[phone];
+    }
+  }
+}
+
+function sendWhatsappReply(req: express.Request, res: express.Response, message: string) {
+  const isFormUrlencoded = req.headers["content-type"]?.includes("application/x-www-form-urlencoded");
+  const isTwilio = isFormUrlencoded || !!req.headers["x-twilio-signature"];
+
+  if (isTwilio) {
+    const twiml = new twilio.twiml.MessagingResponse();
+    twiml.message(message);
+    res.type("text/xml");
+    return res.send(twiml.toString());
+  } else {
+    return res.json({
+      success: true,
+      reply: message
+    });
+  }
+}
+
+function validateTwilioRequest(req: express.Request): boolean {
+  const signature = req.headers["x-twilio-signature"];
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!signature || !authToken || authToken.startsWith("your_") || authToken === "") {
+    return true; // Pass verification if no signature or credentials are not configured
+  }
+
+  const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+  const host = req.get("host");
+  const url = `${protocol}://${host}/webhook/whatsapp-trigger`;
+
+  return twilio.validateRequest(authToken, signature as string, url, req.body);
+}
+
+async function handleVerificationCodeMessage(targetDb: any, req: express.Request, res: express.Response, from: string, body: string) {
+  let code = body.toUpperCase();
+  if (code.startsWith("VERIFY ")) {
+    code = code.replace("VERIFY ", "");
+  }
+  code = code.trim();
+
+  let matchedUserId: string | null = null;
+  let matchedProfile: UserProfile | null = null;
+
+  if (targetDb.profiles) {
+    for (const [uid, pRaw] of Object.entries(targetDb.profiles)) {
+      const p = pRaw as UserProfile;
+      if (p.whatsappCode?.code === code) {
+        const expiry = new Date(p.whatsappCode.expiresAt);
+        if (expiry > new Date()) {
+          matchedUserId = uid;
+          matchedProfile = p;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!matchedUserId && targetDb.activeUserProfile?.whatsappCode?.code === code) {
+    const expiry = new Date(targetDb.activeUserProfile.whatsappCode.expiresAt);
+    if (expiry > new Date()) {
+      matchedUserId = targetDb.activeUserProfile.id;
+      matchedProfile = targetDb.activeUserProfile;
+    }
+  }
+
+  if (matchedUserId && matchedProfile) {
+    matchedProfile.whatsappNumber = from;
+    matchedProfile.whatsappVerified = true;
+    delete matchedProfile.whatsappCode;
+
+    if (targetDb.activeUserProfile?.id === matchedUserId) {
+      targetDb.activeUserProfile.whatsappNumber = from;
+      targetDb.activeUserProfile.whatsappVerified = true;
+      delete targetDb.activeUserProfile.whatsappCode;
+    }
+    if (targetDb.profiles && targetDb.profiles[matchedUserId]) {
+      targetDb.profiles[matchedUserId] = matchedProfile;
+    }
+
+    saveDatabase(targetDb);
+
+    try {
+      await setDoc(doc(firestore, "profiles", matchedUserId), matchedProfile);
+    } catch (e) {
+      console.error("Firestore error updating linked profile:", e);
+    }
+
+    return sendWhatsappReply(req, res, `🎉 Success! Your WhatsApp number has been successfully linked to your profile (${matchedProfile.name}). You will receive real-time notifications about your tickets here!`);
+  } else {
+    return sendWhatsappReply(req, res, "❌ Invalid or expired verification code. Please request a new code from the web application under your profile page.");
+  }
+}
+
+async function createWhatsappIssue(targetDb: any, from: string, partial: any, latitude?: any, longitude?: any, imageUrl?: string, req?: express.Request) {
+  const issueId = "issue_" + Date.now();
+  const trackingId = `CIVIC-${Math.floor(100000 + Math.random() * 900000)}`;
+
+  const phone = normalizePhone(from);
+  const lat = Number(latitude) || Number(partial.latitude) || 12.9716;
+  const lng = Number(longitude) || Number(partial.longitude) || 77.6412;
+  const descText = partial.description || "User submitted a complaint through WhatsApp.";
+
+  let analysisResult: any;
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey && apiKey !== "MY_GEMINI_API_KEY") {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          category: { type: Type.STRING },
+          title: { type: Type.STRING },
+          refinedDescription: { type: Type.STRING },
+          severity: { type: Type.INTEGER },
+          department: { type: Type.STRING },
+          representative: { type: Type.STRING },
+          ward: { type: Type.STRING }
+        },
+        required: ["category", "title", "refinedDescription", "severity", "department", "representative", "ward"]
+      };
+      const aiRes = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `Analyze this WhatsApp text: "${descText}". Map it to civic categories, assign BBMP department, find Indiranagar ward, score severity 1-5, and create a 5-word title.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
+        }
+      });
+      analysisResult = JSON.parse(aiRes.text);
+    } catch (err) {
+      console.warn("AI parsing failed in WhatsApp trigger, using rule fallback", err);
+      analysisResult = parseFallbackText(descText);
+    }
+  } else {
+    analysisResult = parseFallbackText(descText);
+  }
+
+  let duplicateIssue: Issue | null = null;
+  for (const issue of targetDb.issues) {
+    if (issue.category === analysisResult.category) {
+      const distance = getDistanceInMeters(issue.latitude, issue.longitude, lat, lng);
+      if (distance <= 100) {
+        const similarityScore = calculateSimilarity(issue.description, descText);
+        if (similarityScore > 0.5) {
+          duplicateIssue = issue;
+          break;
+        }
+      }
+    }
+  }
+
+  if (duplicateIssue) {
+    const voterId = "wa_" + phone;
+    if (duplicateIssue.votedUserIds.includes(voterId)) {
+      return {
+        reply: `📢 You have already upvoted this issue! We have it logged under Tracking ID: ${duplicateIssue.trackingId}. The municipal department is processing it. Current Support: ${duplicateIssue.upvotes} upvotes.`,
+        trackingId: duplicateIssue.trackingId
+      };
+    }
+
+    duplicateIssue.votedUserIds.push(voterId);
+    duplicateIssue.upvotes += 1;
+    duplicateIssue.agreeVotes += 1;
+
+    saveDatabase(targetDb);
+    
+    try {
+      await setDoc(doc(firestore, "issues", duplicateIssue.id), duplicateIssue);
+    } catch (e) {
+      console.error("Firestore sync error upvoting issue:", e);
+    }
+
+    return {
+      reply: `📍 We found an existing report for this exact issue in your area (Tracking ID: ${duplicateIssue.trackingId}).\n\nTo increase priority, we have added your verification and upvoted it! Total upvotes: ${duplicateIssue.upvotes}.\n\nThank you for corroborating this concern!`,
+      trackingId: duplicateIssue.trackingId
+    };
+  }
+
+  let reporterId = "guest";
+  let reporterName = "WhatsApp Citizen";
+  if (targetDb.profiles) {
+    for (const [uid, pRaw] of Object.entries(targetDb.profiles)) {
+      const p = pRaw as UserProfile;
+      if (p.whatsappNumber === phone && p.whatsappVerified) {
+        reporterId = uid;
+        reporterName = p.name;
+        break;
+      }
+    }
+  }
+  if (reporterId === "guest" && targetDb.activeUserProfile?.whatsappNumber === phone && targetDb.activeUserProfile?.whatsappVerified) {
+    reporterId = targetDb.activeUserProfile.id;
+    reporterName = targetDb.activeUserProfile.name;
+  }
+
+  let signupLink = "";
+  if (reporterId === "guest") {
+    const token = "tok_" + Math.random().toString(36).substring(2, 10);
+    if (!targetDb.whatsappVerificationTokens) {
+      targetDb.whatsappVerificationTokens = {};
+    }
+    targetDb.whatsappVerificationTokens[token] = {
+      token,
+      phone,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    };
+    
+    const protocol = req && (req.secure || req.headers["x-forwarded-proto"] === "https") ? "https" : "http";
+    const host = req ? req.get("host") : "localhost:3000";
+    const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+    signupLink = `${appUrl}/?whatsappToken=${token}&whatsappPhone=${encodeURIComponent(phone)}`;
+  }
+
+  const newIssue: Issue = {
+    id: issueId,
+    trackingId: trackingId,
+    category: analysisResult.category || "Waste Management",
+    title: analysisResult.title || "Civic Issue",
+    description: descText,
+    locationName: "Indiranagar, Bengaluru",
+    latitude: lat,
+    longitude: lng,
+    timestamp: new Date().toISOString(),
+    status: "PENDING",
+    severity: Number(analysisResult.severity) || 3,
+    imageUrl: imageUrl || partial.imageUrl || "",
+    isAnonymous: false,
+    reporterName: reporterName,
+    virtualAssetId: "sector-2",
+    upvotes: 1,
+    agreeVotes: 1,
+    disagreeVotes: 0,
+    votedUserIds: ["wa_" + phone],
+    evidenceLinks: (imageUrl || partial.imageUrl) ? [imageUrl || partial.imageUrl] : [],
+    corroborations: [],
+    ward: analysisResult.ward || "Indiranagar Ward 88",
+    department: analysisResult.department || "BBMP Solid Waste Management",
+    representative: analysisResult.representative || "Ward Corporator",
+    reporterId: reporterId
+  };
+
+  (newIssue as any).whatsappRawNumber = phone;
+
+  targetDb.issues.unshift(newIssue);
+
+  if (reporterId !== "guest") {
+    let profile = targetDb.profiles ? targetDb.profiles[reporterId] : null;
+    if (profile) {
+      profile.totalPoints += 50;
+      profile.contributionCount += 1;
+      if (!profile.pointsBreakdown) {
+        profile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
+      }
+      profile.pointsBreakdown.reporting += 50;
+    }
+    if (targetDb.activeUserProfile?.id === reporterId) {
+      targetDb.activeUserProfile.totalPoints += 50;
+      targetDb.activeUserProfile.contributionCount += 1;
+      if (!targetDb.activeUserProfile.pointsBreakdown) {
+        targetDb.activeUserProfile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
+      }
+      targetDb.activeUserProfile.pointsBreakdown.reporting += 50;
+    }
+  }
+
+  saveDatabase(targetDb);
+
+  try {
+    await setDoc(doc(firestore, "issues", issueId), newIssue);
+    if (reporterId !== "guest") {
+      await setDoc(doc(firestore, "profiles", reporterId), targetDb.profiles[reporterId]);
+    }
+  } catch (e) {
+    console.error("Firestore sync error creating issue:", e);
+  }
+
+  const replyMsg = reporterId !== "guest" 
+    ? `✅ Thanks! Your issue has been logged successfully as ${trackingId}.\n\nCategory: ${newIssue.category}\nSeverity: ${newIssue.severity}/5\n\nYour profile has been credited with +50 points!`
+    : `✅ Thanks! Your issue has been logged successfully as ${trackingId}.\n\nCategory: ${newIssue.category}\nSeverity: ${newIssue.severity}/5\n\nTo view this ticket on the live map, track its status, and claim 50 civic reward points, link your profile by clicking this link:\n\n${signupLink}`;
+
+  return {
+    reply: replyMsg,
+    trackingId
+  };
+}
+
 app.post("/webhook/whatsapp-trigger", async (req, res) => {
   db = loadDatabase();
   try {
-    const { from, body, latitude, longitude, imageUrl } = req.body;
-    
     // Support the legacy parsedPayload structure if it is sent
     if (req.body.parsedPayload && req.body.parsedPayload.title) {
       return handleLegacyWhatsappPayload(req, res);
     }
 
-    if (!from || !body) {
-      return res.status(400).json({ error: "Missing required fields 'from' or 'body'" });
+    const rawFrom = req.body.from || req.body.From || "";
+    const rawBody = req.body.body || req.body.Body || "";
+    const latitude = req.body.latitude || req.body.Latitude;
+    const longitude = req.body.longitude || req.body.Longitude;
+    const imageUrl = req.body.imageUrl || req.body.ImageUrl || req.body.MediaUrl0 || "";
+
+    if (!rawFrom) {
+      return res.status(400).json({ error: "Missing required fields 'from' or 'From'" });
     }
 
-    const messageText = body.trim();
+    const from = normalizePhone(rawFrom);
+    const body = rawBody.trim();
 
-    // 1. Check if it is a Handshake/Verification message
-    const isVerificationCode = messageText.toUpperCase().startsWith("WA-") || 
-                               messageText.toUpperCase().startsWith("VERIFY WA-");
+    // Twilio signature verification
+    if (!validateTwilioRequest(req)) {
+      console.warn("Rejected Twilio webhook — invalid signature", { ip: req.ip });
+      return res.status(401).send("Unauthorized: Invalid signature");
+    }
+
+    // Preserve the existing verification code path
+    const isVerificationCode = body.toUpperCase().startsWith("WA-") || 
+                               body.toUpperCase().startsWith("VERIFY WA-");
     
     if (isVerificationCode) {
-      let code = messageText.toUpperCase();
-      if (code.startsWith("VERIFY ")) {
-        code = code.replace("VERIFY ", "");
-      }
-      code = code.trim();
-
-      let matchedUserId: string | null = null;
-      let matchedProfile: UserProfile | null = null;
-
-      if (db.profiles) {
-        for (const [uid, p] of Object.entries(db.profiles)) {
-          if (p.whatsappCode?.code === code) {
-            const expiry = new Date(p.whatsappCode.expiresAt);
-            if (expiry > new Date()) {
-              matchedUserId = uid;
-              matchedProfile = p;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!matchedUserId && db.activeUserProfile?.whatsappCode?.code === code) {
-        const expiry = new Date(db.activeUserProfile.whatsappCode.expiresAt);
-        if (expiry > new Date()) {
-          matchedUserId = db.activeUserProfile.id;
-          matchedProfile = db.activeUserProfile;
-        }
-      }
-
-      if (matchedUserId && matchedProfile) {
-        matchedProfile.whatsappNumber = from;
-        matchedProfile.whatsappVerified = true;
-        delete matchedProfile.whatsappCode;
-
-        if (db.activeUserProfile?.id === matchedUserId) {
-          db.activeUserProfile.whatsappNumber = from;
-          db.activeUserProfile.whatsappVerified = true;
-          delete db.activeUserProfile.whatsappCode;
-        }
-        if (db.profiles && db.profiles[matchedUserId]) {
-          db.profiles[matchedUserId] = matchedProfile;
-        }
-
-        saveDatabase(db);
-
-        try {
-          await setDoc(doc(firestore, "profiles", matchedUserId), matchedProfile);
-        } catch (e) {
-          console.error("Firestore error updating linked profile:", e);
-        }
-
-        return res.json({
-          reply: `🎉 Success! Your WhatsApp number has been successfully linked to your profile (${matchedProfile.name}). You will receive real-time notifications about your tickets here!`
-        });
-      } else {
-        return res.json({
-          reply: "❌ Invalid or expired verification code. Please request a new code from the web application under your profile page."
-        });
-      }
+      return await handleVerificationCodeMessage(db, req, res, from, body);
     }
 
-    // 2. Treat as incoming Civic Issue Report
-    let analysisResult: any;
+    // Prune stale conversations
+    pruneWhatsappConversations(db);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey && apiKey !== "MY_GEMINI_API_KEY") {
-      try {
-        const ai = new GoogleGenAI({ apiKey });
-        const responseSchema = {
-          type: Type.OBJECT,
-          properties: {
-            category: { type: Type.STRING },
-            title: { type: Type.STRING },
-            refinedDescription: { type: Type.STRING },
-            severity: { type: Type.INTEGER },
-            department: { type: Type.STRING },
-            representative: { type: Type.STRING },
-            ward: { type: Type.STRING }
-          },
-          required: ["category", "title", "refinedDescription", "severity", "department", "representative", "ward"]
-        };
-        const aiRes = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: `Analyze this WhatsApp text: "${messageText}". Map it to civic categories, assign BBMP department, find Indiranagar ward, score severity 1-5, and create a 5-word title.`,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-          }
-        });
-        analysisResult = JSON.parse(aiRes.text);
-      } catch (err) {
-        console.warn("AI parsing failed in WhatsApp trigger, using rule fallback", err);
-        analysisResult = parseFallbackText(messageText);
-      }
-    } else {
-      analysisResult = parseFallbackText(messageText);
-    }
-
-    const lat = Number(latitude) || 12.9716;
-    const lng = Number(longitude) || 77.6412;
-
-    // Check duplicate rule
-    let duplicateIssue: Issue | null = null;
-    for (const issue of db.issues) {
-      if (issue.category === analysisResult.category) {
-        const distance = getDistanceInMeters(issue.latitude, issue.longitude, lat, lng);
-        if (distance <= 100) {
-          const similarityScore = calculateSimilarity(issue.description, messageText);
-          if (similarityScore > 0.5) {
-            duplicateIssue = issue;
-            break;
-          }
-        }
-      }
-    }
-
-    if (duplicateIssue) {
-      const voterId = "wa_" + from;
-      if (duplicateIssue.votedUserIds.includes(voterId)) {
-        return res.json({
-          reply: `📢 You have already upvoted this issue! We have it logged under Tracking ID: ${duplicateIssue.trackingId}. The municipal department is processing it. Current Support: ${duplicateIssue.upvotes} upvotes.`
-        });
-      }
-
-      duplicateIssue.votedUserIds.push(voterId);
-      duplicateIssue.upvotes += 1;
-      duplicateIssue.agreeVotes += 1;
-
-      saveDatabase(db);
-      
-      try {
-        await setDoc(doc(firestore, "issues", duplicateIssue.id), duplicateIssue);
-      } catch (e) {
-        console.error("Firestore sync error upvoting issue:", e);
-      }
-
-      return res.json({
-        reply: `📍 We found an existing report for this exact issue in your area (Tracking ID: ${duplicateIssue.trackingId}).\n\nTo increase priority, we have added your verification and upvoted it! Total upvotes: ${duplicateIssue.upvotes}.\n\nThank you for corroborating this concern!`
-      });
-    }
-
-    // Create a new report
-    const issueId = "issue_" + Date.now();
-    const trackingId = `CIVIC-${Math.floor(100000 + Math.random() * 900000)}`;
-    
-    let reporterId = "guest";
-    let reporterName = "WhatsApp Citizen";
-    
-    if (db.profiles) {
-      for (const [uid, p] of Object.entries(db.profiles)) {
-        if (p.whatsappNumber === from && p.whatsappVerified) {
-          reporterId = uid;
-          reporterName = p.name;
-          break;
-        }
-      }
-    }
-    if (reporterId === "guest" && db.activeUserProfile?.whatsappNumber === from && db.activeUserProfile?.whatsappVerified) {
-      reporterId = db.activeUserProfile.id;
-      reporterName = db.activeUserProfile.name;
-    }
-
-    const newIssue: Issue = {
-      id: issueId,
-      trackingId: trackingId,
-      category: analysisResult.category || "Waste Management",
-      title: analysisResult.title || "Civic Issue",
-      description: messageText,
-      locationName: "Indiranagar, Bengaluru",
-      latitude: lat,
-      longitude: lng,
-      timestamp: new Date().toISOString(),
-      status: "PENDING",
-      severity: Number(analysisResult.severity) || 3,
-      imageUrl: imageUrl || "",
-      isAnonymous: false,
-      reporterName: reporterName,
-      virtualAssetId: "sector-2",
-      upvotes: 1,
-      agreeVotes: 1,
-      disagreeVotes: 0,
-      votedUserIds: ["wa_" + from],
-      evidenceLinks: imageUrl ? [imageUrl] : [],
-      corroborations: [],
-      ward: analysisResult.ward || "Indiranagar Ward 88",
-      department: analysisResult.department || "BBMP Solid Waste Management",
-      representative: analysisResult.representative || "Ward Corporator",
-      reporterId: reporterId
+    const convo = getWhatsappConversation(db, from) || {
+      stage: "new",
+      pendingIssue: { description: "", imageUrl: "", latitude: null, longitude: null },
+      signinToken: "",
+      updatedAt: new Date().toISOString()
     };
 
-    (newIssue as any).whatsappRawNumber = from;
-
-    db.issues.unshift(newIssue);
-
-    if (reporterId !== "guest") {
-      let profile = db.profiles ? db.profiles[reporterId] : null;
-      if (profile) {
-        profile.totalPoints += 50;
-        profile.contributionCount += 1;
-        if (!profile.pointsBreakdown) {
-          profile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
-        }
-        profile.pointsBreakdown.reporting += 50;
-      }
-      if (db.activeUserProfile?.id === reporterId) {
-        db.activeUserProfile.totalPoints += 50;
-        db.activeUserProfile.contributionCount += 1;
-        if (!db.activeUserProfile.pointsBreakdown) {
-          db.activeUserProfile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
-        }
-        db.activeUserProfile.pointsBreakdown.reporting += 50;
-      }
+    if (convo.stage === "new") {
+      convo.stage = "awaiting_menu_choice";
+      convo.updatedAt = new Date().toISOString();
+      setWhatsappConversation(db, from, convo);
+      saveDatabase(db);
+      return sendWhatsappReply(req, res, `Hello! What would you like to do today?\n1. Issue Complaint\n2. Sign in on IndiaCivic\nReply with 1 or 2.`);
     }
 
-    let signupLink = "";
-    if (reporterId === "guest") {
-      const token = "tok_" + Math.random().toString(36).substring(2, 10);
-      if (!(db as any).whatsappVerificationTokens) {
-        (db as any).whatsappVerificationTokens = {};
+    if (convo.stage === "awaiting_menu_choice") {
+      const choice = body.trim().toLowerCase();
+      if (choice === "1" || choice.includes("issue") || choice.includes("complaint")) {
+        convo.stage = "awaiting_issue_description";
+        convo.updatedAt = new Date().toISOString();
+        setWhatsappConversation(db, from, convo);
+        saveDatabase(db);
+        return sendWhatsappReply(req, res, "Please describe your issue in one or two sentences.");
       }
-      (db as any).whatsappVerificationTokens[token] = {
-        token,
-        phone: from,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
-      };
-      
-      const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
-      const host = req.get("host");
-      const appUrl = process.env.APP_URL || `${protocol}://${host}`;
-      signupLink = `${appUrl}/?whatsappToken=${token}&whatsappPhone=${encodeURIComponent(from)}`;
+      if (choice === "2" || choice.includes("sign in") || choice.includes("signin") || choice.includes("login") || choice.includes("log in")) {
+        const token = "tok_" + Math.random().toString(36).substring(2, 10);
+        convo.stage = "completed";
+        convo.signinToken = token;
+        convo.updatedAt = new Date().toISOString();
+        setWhatsappConversation(db, from, convo);
+
+        if (!db.whatsappVerificationTokens) {
+          db.whatsappVerificationTokens = {};
+        }
+        db.whatsappVerificationTokens[token] = {
+          token,
+          phone: from,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        };
+
+        const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+        const host = req.get("host");
+        const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+        const signinLink = `${appUrl}/?whatsappToken=${token}&whatsappPhone=${encodeURIComponent(from)}`;
+
+        saveDatabase(db);
+        return sendWhatsappReply(req, res, `Great! Use this sign-in link to log in on IndiaCivic and automatically link your WhatsApp number:\n\n${signinLink}`);
+      }
+      return sendWhatsappReply(req, res, "Sorry, I didn't understand that. Reply with 1 for Issue Complaint or 2 for Sign in.");
     }
 
+    if (convo.stage === "awaiting_issue_description") {
+      if (body.length < 5) {
+        return sendWhatsappReply(req, res, "Please provide a slightly more detailed description of the issue so we can categorize it correctly.");
+      }
+      convo.pendingIssue.description = body;
+      convo.stage = "awaiting_media_location";
+      convo.updatedAt = new Date().toISOString();
+      setWhatsappConversation(db, from, convo);
+      saveDatabase(db);
+      return sendWhatsappReply(req, res, "Thanks! Please send any images or video now, and share your current location. If you do not want to attach media, reply 'skip'.");
+    }
+
+    if (convo.stage === "awaiting_media_location") {
+      convo.updatedAt = new Date().toISOString();
+      if (body.toLowerCase() === "skip") {
+        const result = await createWhatsappIssue(db, from, convo.pendingIssue, latitude, longitude, imageUrl, req);
+        clearWhatsappConversation(db, from);
+        saveDatabase(db);
+        return sendWhatsappReply(req, res, result.reply);
+      }
+
+      if (latitude && longitude) {
+        convo.pendingIssue.latitude = Number(latitude);
+        convo.pendingIssue.longitude = Number(longitude);
+      }
+      if (imageUrl) {
+        convo.pendingIssue.imageUrl = imageUrl;
+      }
+      if (body && body.length > 0) {
+        convo.pendingIssue.description += " " + body;
+      }
+
+      const result = await createWhatsappIssue(db, from, convo.pendingIssue, latitude, longitude, imageUrl, req);
+      clearWhatsappConversation(db, from);
+      saveDatabase(db);
+      return sendWhatsappReply(req, res, result.reply);
+    }
+
+    // Default fallback
+    clearWhatsappConversation(db, from);
     saveDatabase(db);
-
-    try {
-      await setDoc(doc(firestore, "issues", issueId), newIssue);
-      if (reporterId !== "guest") {
-        await setDoc(doc(firestore, "profiles", reporterId), db.profiles[reporterId]);
-      }
-    } catch (e) {
-      console.error("Firestore sync error:", e);
-    }
-
-    const replyMsg = reporterId !== "guest" 
-      ? `✅ Thank you! Your report has been logged under Tracking ID: ${trackingId}.\n\nCategory: ${newIssue.category}\nSeverity: ${newIssue.severity}/5\n\nYour profile has been credited with +50 points!`
-      : `✅ Thank you! Your report has been logged under Tracking ID: ${trackingId}.\n\nCategory: ${newIssue.category}\nSeverity: ${newIssue.severity}/5\n\nTo view this ticket on the live map, track its status, and claim 50 civic reward points, link your profile by clicking this link:\n\n${signupLink}`;
-
-    res.json({
-      success: true,
-      message: "Issue logged via WhatsApp",
-      issueId,
-      trackingId,
-      reply: replyMsg
-    });
+    return sendWhatsappReply(req, res, "Let's start again. What would you like to do today?\n1. Issue Complaint\n2. Sign in on IndiaCivic\nReply with 1 or 2.");
 
   } catch (err: any) {
-    console.error("Error processing simulated WhatsApp trigger:", err);
+    console.error("Error processing WhatsApp trigger webhook:", err);
     res.status(500).json({ error: "Internal processing error", details: err.message });
   }
 });
