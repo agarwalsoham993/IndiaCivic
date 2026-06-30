@@ -1,0 +1,848 @@
+{
+  "issues": [
+    {
+      "id": "issue_1782806728714",
+      "trackingId": "CIVIC-146790",
+      "category": "Broken Public Assets",
+      "title": "Dead Streetlight LED",
+      "description": "street lights not working, very dark",
+      "locationName": "Indiranagar, Bengaluru",
+      "latitude": 12.9719,
+      "longitude": 77.6412,
+      "timestamp": "2026-06-30T08:05:28.714Z",
+      "status": "PENDING",
+      "severity": 3,
+      "imageUrl": "",
+      "isAnonymous": false,
+      "reporterName": "WhatsApp Citizen",
+      "virtualAssetId": "sector-2",
+      "upvotes": 1,
+      "agreeVotes": 1,
+      "disagreeVotes": 0,
+      "votedUserIds": [
+        "wa_+917777777777"
+      ],
+      "evidenceLinks": [],
+      "corroborations": [],
+      "ward": "Ward 88 - Indiranagar",
+      "department": "BESCOM - Streetlight Cell",
+      "representative": "Engineer Anjali Hegde",
+      "reporterId": "guest",
+      "whatsappRawNumber": "+917777777777"
+    },
+    {
+      "id": "issue_1782806721837",
+      "trackingId": "CIVIC-897959",
+      "category": "Broken Public Assets",
+      "title": "Broken Asset Reported",
+      "description": "pothole on road",
+      "locationName": "Indiranagar, Bengaluru",
+      "latitude": 12.9719,
+      "longitude": 77.6412,
+      "timestamp": "2026-06-30T08:05:21.837Z",
+      "status": "PENDING",
+      "severity": 3,
+      "imageUrl": "",
+      "isAnonymous": false,
+      "reporterName": "Soham",
+      "virtualAssetId": "sector-2",
+      "upvotes": 2,
+      "agreeVotes": 2,
+      "disagreeVotes": 0,
+      "votedUserIds": [
+        "9CPEpFcK1fWcRxlwaQoYD323y5u1",
+        "wa_+918888888888"
+      ],
+      "evidenceLinks": [],
+      "corroborations": [],
+      "ward": "Ward 88 - Indiranagar",
+      "department": "Bruhat Bengaluru Mahanagara Palike (BBMP)",
+      "representative": "Nodal Ward Officer",
+      "reporterId": "9CPEpFcK1fWcRxlwaQoYD323y5u1",
+      "whatsappRawNumber": "+919999999999"
+    },
+    {
+      "id": "issue-8492",
+      "trackingId": "#IC-8492",
+      "category": "Drainage & Waterlogging",
+      "title": "Broken Water Pipeline Leakage",
+      "description": "Main water pipeline has ruptured near the intersection, causing extensive waterlogging. Thousands of liters of drinking water are being wasted hourly, flooding the sidewalk.",
+      "locationName": "Main St. & 4th Ave, Indiranagar, Bengaluru",
+      "latitude": 12.9719,
+      "longitude": 77.6412,
+      "timestamp": "2026-06-30T06:04:58.401Z",
+      "status": "PENDING",
+      "severity": 4,
+      "imageUrl": "https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=600&q=80",
+      "isAnonymous": true,
+      "reporterName": "Anonymous Citizen",
+      "virtualAssetId": "V-ASSET-0927",
+      "upvotes": 42,
+      "agreeVotes": 38,
+      "disagreeVotes": 2,
+      "votedUserIds": [],
+      "evidenceLinks": [
+        "https://instagram.com/reel/C8_pothole_leak_sample"
+      ],
+      "corroborations": [
+        {
+          "id": "corr-1",
+          "author": "Citizen_X",
+          "timestamp": "2026-06-30T07:04:58.401Z",
+          "text": "Walked past this an hour ago. It's getting worse, flooding the entire sidewalk.",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80"
+        },
+        {
+          "id": "corr-2",
+          "author": "LocalShop",
+          "timestamp": "2026-06-30T07:34:58.401Z",
+          "text": "Water pressure in our building dropped because of this. BBMP needs to fix it ASAP.",
+          "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=80&q=80"
+        }
+      ],
+      "ward": "Ward 88 - Indiranagar",
+      "department": "Bangalore Water Supply and Sewerage Board (BWSSB)",
+      "representative": "Corporator Suresh Kumar"
+    },
+    {
+      "representative": "Corporator Suresh Kumar",
+      "agreeVotes": 72,
+      "timestamp": "2026-06-25T02:38:11.208Z",
+      "latitude": 12.9756,
+      "votedUserIds": [
+        "user-rahul-sharma"
+      ],
+      "trackingId": "#IC-8491",
+      "status": "PENDING",
+      "upvotes": 78,
+      "department": "Bruhat Bengaluru Mahanagara Palike (BBMP) - Solid Waste Management",
+      "severity": 5,
+      "reporterName": "Rahul Sharma",
+      "category": "Waste Management",
+      "isAnonymous": false,
+      "locationName": "100ft Road, near Metro Station, Indiranagar, Bengaluru",
+      "corroborations": [
+        {
+          "id": "corr-3",
+          "text": "The smell is unbearable. Shops next to it are struggling to operate.",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80",
+          "timestamp": "2026-06-25T04:38:11.208Z",
+          "author": "Kiran_K"
+        }
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&w=600&q=80",
+      "id": "issue-8491",
+      "evidenceLinks": [],
+      "ward": "Ward 88 - Indiranagar",
+      "title": "Overflowing Garbage Bin & Littering",
+      "virtualAssetId": "V-ASSET-0442",
+      "description": "Large municipal green trash bin is completely overflowing on 100ft Road. Street dogs and cows are scattering garbage across the roadway, generating a severe stench and blocking pedestrian passage.",
+      "longitude": 77.6411,
+      "disagreeVotes": 1
+    },
+    {
+      "upvotes": 45,
+      "status": "PENDING",
+      "department": "Municipal Corporation of Greater Mumbai (MCGM) - Solid Waste Management",
+      "severity": 4,
+      "category": "Waste Management",
+      "reporterName": "Priya Salve",
+      "isAnonymous": false,
+      "representative": "Assistant Commissioner Vinayak Vispute",
+      "agreeVotes": 41,
+      "timestamp": "2026-06-24T10:48:26.634Z",
+      "latitude": 19.068,
+      "votedUserIds": [],
+      "trackingId": "#IC-M101",
+      "title": "Plastic litter pile on Carter Road beach",
+      "ward": "Ward H-West - Bandra",
+      "virtualAssetId": "V-ASSET-M101",
+      "description": "Tons of non-biodegradable plastic wrappers, bottles, and general household trash washed ashore on Carter Road Promenade beach near the public viewing area.",
+      "disagreeVotes": 1,
+      "longitude": 72.822,
+      "corroborations": [],
+      "locationName": "Carter Road Promenade, Bandra West, Mumbai",
+      "imageUrl": "https://images.unsplash.com/photo-1618477388954-7852f32655ec?auto=format&fit=crop&w=600&q=80",
+      "id": "issue-mumbai-1",
+      "evidenceLinks": []
+    },
+    {
+      "status": "PENDING",
+      "department": "New Delhi Municipal Council (NDMC) - Sanitation Dept",
+      "upvotes": 33,
+      "severity": 4,
+      "reporterName": "Amit Mishra",
+      "category": "Waste Management",
+      "isAnonymous": false,
+      "representative": "Officer Satish Sharma",
+      "agreeVotes": 30,
+      "timestamp": "2026-06-24T08:48:26.634Z",
+      "latitude": 28.635,
+      "votedUserIds": [],
+      "trackingId": "#IC-D201",
+      "title": "Litter piling in Connaught Place outer circle",
+      "ward": "NDMC - Ward 1 (Connaught Place)",
+      "description": "Garbage and promotional flyers piling up extensively near the heritage columns and main pedestrian crossings. Stench is unbearable for shoppers.",
+      "virtualAssetId": "V-ASSET-D201",
+      "disagreeVotes": 0,
+      "longitude": 77.215,
+      "locationName": "Connaught Place Outer Circle, New Delhi",
+      "corroborations": [],
+      "imageUrl": "https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&w=600&q=80",
+      "id": "issue-delhi-1",
+      "evidenceLinks": []
+    },
+    {
+      "disagreeVotes": 0,
+      "longitude": 77.6398,
+      "title": "Broken Streetlight on 12th Main",
+      "ward": "Ward 88 - Indiranagar",
+      "virtualAssetId": "V-ASSET-0238",
+      "description": "Entire pole's LED light is dead. This stretch becomes pitch dark after 6:30 PM, creating safety concerns for women and pedestrians returning from work.",
+      "id": "issue-8490",
+      "evidenceLinks": [],
+      "imageUrl": "https://images.unsplash.com/photo-1509024644558-2f56ce76c490?auto=format&fit=crop&w=600&q=80",
+      "locationName": "12th Main Road, Corner, Indiranagar, Bengaluru",
+      "corroborations": [],
+      "isAnonymous": false,
+      "severity": 3,
+      "category": "Broken Public Assets",
+      "reporterName": "Ananya Iyer",
+      "upvotes": 15,
+      "department": "Bangalore Electricity Supply Company (BESCOM)",
+      "status": "IN_PROGRESS",
+      "votedUserIds": [],
+      "trackingId": "#IC-8490",
+      "agreeVotes": 14,
+      "latitude": 12.9732,
+      "timestamp": "2026-06-24T06:38:11.208Z",
+      "representative": "Engineer Anjali Hegde"
+    },
+    {
+      "evidenceLinks": [],
+      "id": "issue-mumbai-2",
+      "imageUrl": "https://images.unsplash.com/photo-1515162305285-0293e4767cc2?auto=format&fit=crop&w=600&q=80",
+      "corroborations": [],
+      "locationName": "Linking Road, near National College, Bandra West, Mumbai",
+      "disagreeVotes": 0,
+      "longitude": 72.835,
+      "virtualAssetId": "V-ASSET-M102",
+      "description": "Series of deep potholes right at the center of the road, causing severe bike accidents and massive traffic bottlenecks during peak hours.",
+      "title": "Dangerous potholes sequence on Linking Road",
+      "ward": "Ward H-West - Bandra",
+      "trackingId": "#IC-M102",
+      "votedUserIds": [],
+      "latitude": 19.072,
+      "timestamp": "2026-06-24T03:48:26.634Z",
+      "agreeVotes": 79,
+      "representative": "Engineer Anil Shinde",
+      "isAnonymous": true,
+      "category": "Broken Public Assets",
+      "reporterName": "Anonymous Citizen",
+      "severity": 5,
+      "upvotes": 82,
+      "department": "MCGM - Roads & Traffic Department",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "corroborations": [],
+      "locationName": "Janpath Road, near Market Gate 2, Connaught Place, New Delhi",
+      "imageUrl": "https://images.unsplash.com/photo-1509024644558-2f56ce76c490?auto=format&fit=crop&w=600&q=80",
+      "id": "issue-delhi-2",
+      "evidenceLinks": [],
+      "ward": "NDMC - Ward 1 (Connaught Place)",
+      "title": "Dark streetlights sequence on Janpath Road",
+      "virtualAssetId": "V-ASSET-D202",
+      "description": "A series of 5 heritage streetlight poles are completely out near the market entrance. The area becomes unsafe for women and tourists at night.",
+      "longitude": 77.228,
+      "disagreeVotes": 1,
+      "representative": "Assistant Engineer V.K. Singh",
+      "agreeVotes": 52,
+      "latitude": 28.638,
+      "timestamp": "2026-06-23T22:48:26.634Z",
+      "votedUserIds": [],
+      "trackingId": "#IC-D202",
+      "department": "NDMC - Electricity Department",
+      "upvotes": 56,
+      "status": "PENDING",
+      "severity": 3,
+      "category": "Broken Public Assets",
+      "reporterName": "Neha Aggarwal",
+      "isAnonymous": false
+    }
+  ],
+  "campaigns": [
+    {
+      "voters": [],
+      "verificationStep": 1,
+      "donations": [
+        {
+          "campaignName": "Fixing the Pot-holes on MG Road Junction",
+          "campaignId": "camp-1",
+          "donorId": "user-dummy-amit",
+          "gstin": "29AAAAA0000A1Z1",
+          "receiptNumber": "GST-2026-00104",
+          "amount": 5000,
+          "timestamp": "2026-06-24T05:36:18.113Z",
+          "id": "don-1",
+          "donorName": "Amit Patel"
+        },
+        {
+          "donorName": "Siddharth Sen",
+          "id": "don-2",
+          "timestamp": "2026-06-24T08:36:18.113Z",
+          "amount": 1000,
+          "receiptNumber": "GST-2026-00105",
+          "donorId": "user-dummy-sid",
+          "campaignId": "camp-1",
+          "gstin": "29AAAAA0000A1Z1",
+          "campaignName": "Fixing the Pot-holes on MG Road Junction"
+        },
+        {
+          "id": "don-3",
+          "donorName": "Meera Nair",
+          "gstin": "29AAAAA0000A1Z1",
+          "donorId": "user-dummy-meera",
+          "campaignId": "camp-1",
+          "receiptNumber": "GST-2026-00103",
+          "timestamp": "2026-06-23T10:36:18.113Z",
+          "amount": 500,
+          "campaignName": "Fixing the Pot-holes on MG Road Junction"
+        },
+        {
+          "campaignName": "Fixing the Pot-holes on MG Road Junction",
+          "donorName": "CosmicResident_5011",
+          "id": "don-1782383146073",
+          "amount": 1000,
+          "timestamp": "2026-06-25T10:25:46.073Z",
+          "receiptNumber": "GST-2026-64385",
+          "donorId": "kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+          "campaignId": "camp-1",
+          "gstin": "29AAAAA0000A1Z1"
+        },
+        {
+          "campaignName": "Fixing the Pot-holes on MG Road Junction",
+          "campaignId": "camp-1",
+          "donorId": "kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+          "gstin": "29AAAAA0000A1Z1",
+          "receiptNumber": "GST-2026-29830",
+          "amount": 1000,
+          "timestamp": "2026-06-25T10:26:02.082Z",
+          "id": "don-1782383162082",
+          "donorName": "CosmicResident_5011"
+        },
+        {
+          "campaignId": "camp-1",
+          "donorId": "kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+          "gstin": "29AAAAA0000A1Z1",
+          "receiptNumber": "GST-2026-48473",
+          "timestamp": "2026-06-25T10:26:05.456Z",
+          "amount": 1000,
+          "id": "don-1782383165456",
+          "donorName": "CosmicResident_5011",
+          "campaignName": "Fixing the Pot-holes on MG Road Junction"
+        }
+      ],
+      "votesDisagree": 0,
+      "id": "camp-1",
+      "description": "The main MG Road crossing has developed multiple deep, hazardous potholes. After two vehicle accidents last week, we are crowdfunding material and hiring local contractors to resolve this immediately, with certified before/after proof.",
+      "title": "Fixing the Pot-holes on MG Road Junction",
+      "createdAt": "2026-06-09T10:36:18.113Z",
+      "votesAgree": 0,
+      "linkedIssueIds": [
+        "issue-8492"
+      ],
+      "currentAmount": 35450,
+      "escrowBalance": 35450,
+      "status": "FUNDRAISING",
+      "daysLeft": 75,
+      "targetAmount": 50000
+    },
+    {
+      "createdAt": "2026-03-31T10:36:18.113Z",
+      "votesAgree": 0,
+      "linkedIssueIds": [
+        "issue-8490"
+      ],
+      "escrowBalance": 20000,
+      "currentAmount": 20000,
+      "status": "EXECUTION",
+      "daysLeft": 5,
+      "targetAmount": 20000,
+      "verificationStep": 2,
+      "voters": [],
+      "donations": [
+        {
+          "donorName": "Rahul Sharma",
+          "id": "don-4",
+          "amount": 2500,
+          "timestamp": "2026-04-05T10:36:18.113Z",
+          "receiptNumber": "GST-2026-00084",
+          "campaignId": "camp-2",
+          "donorId": "user-rahul-sharma",
+          "gstin": "29AAAAA0000A1Z1",
+          "campaignName": "Restore Indiranagar Local Park Lighting"
+        }
+      ],
+      "votesDisagree": 0,
+      "id": "camp-2",
+      "description": "The local children's park has had completely dead electrical systems for weeks, rendering it unusable and hazardous at night. Crowdfunding to buy 6 commercial solar LED light assemblies.",
+      "title": "Restore Indiranagar Local Park Lighting"
+    }
+  ],
+  "activeUserProfile": {
+    "id": "guest",
+    "name": "Guest Neighbour",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=guest",
+    "location": "Indiranagar, Bengaluru",
+    "role": "CITIZEN",
+    "civicScore": 0,
+    "totalPoints": 0,
+    "personalActiveScore": 0,
+    "contributionCount": 0,
+    "citizensHelped": 0,
+    "totalDonations": 0,
+    "pointsBreakdown": {
+      "reporting": 0,
+      "verifying": 0,
+      "donating": 0
+    },
+    "badges": [],
+    "streakDays": 0,
+    "availableFunds": 0
+  },
+  "citizenProfile": {
+    "personalActiveScore": 50,
+    "location": "Indiranagar, Bengaluru",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=9CPEpFcK1fWcRxlwaQoYD323y5u1",
+    "name": "Soham",
+    "totalDonations": 0,
+    "civicScore": 700,
+    "contributionCount": 1,
+    "id": "9CPEpFcK1fWcRxlwaQoYD323y5u1",
+    "streakDays": 1,
+    "pointsBreakdown": {
+      "verifying": 0,
+      "reporting": 65,
+      "donating": 0
+    },
+    "badges": [
+      "New Citizen"
+    ],
+    "totalPoints": 165,
+    "availableFunds": 5000,
+    "citizensHelped": 0,
+    "role": "CITIZEN",
+    "whatsappNumber": "+919999999999",
+    "whatsappVerified": true
+  },
+  "orgProfile": {
+    "location": "North Bengaluru, Ward 42",
+    "carbonCredits": 12450,
+    "personalActiveScore": 95,
+    "contributionCount": 156,
+    "civicScore": 920,
+    "adoptedWards": [
+      "Ward 42, North Zone",
+      "Ward 18, Central",
+      "Ward 05, East Zone"
+    ],
+    "avatar": "https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=150&q=80",
+    "name": "Green Ward Foundation",
+    "totalDonations": 45000,
+    "totalPoints": 8500,
+    "pointsBreakdown": {
+      "verifying": 2000,
+      "reporting": 3500,
+      "donating": 3000
+    },
+    "badges": [
+      "Eco Guardian",
+      "Ward Adoptive Leader",
+      "Gold ESG Rating",
+      "CSR Platinum Partner"
+    ],
+    "streakDays": 28,
+    "id": "org-green-ward",
+    "citizensHelped": 12450,
+    "role": "ORGANIZATION",
+    "availableFunds": 15000
+  },
+  "profiles": {
+    "9CPEpFcK1fWcRxlwaQoYD323y5u1": {
+      "personalActiveScore": 50,
+      "location": "Indiranagar, Bengaluru",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=9CPEpFcK1fWcRxlwaQoYD323y5u1",
+      "name": "Soham",
+      "totalDonations": 0,
+      "civicScore": 700,
+      "contributionCount": 1,
+      "id": "9CPEpFcK1fWcRxlwaQoYD323y5u1",
+      "streakDays": 1,
+      "pointsBreakdown": {
+        "verifying": 0,
+        "reporting": 65,
+        "donating": 0
+      },
+      "badges": [
+        "New Citizen"
+      ],
+      "totalPoints": 165,
+      "availableFunds": 5000,
+      "citizensHelped": 0,
+      "role": "CITIZEN",
+      "whatsappNumber": "+919999999999",
+      "whatsappVerified": true
+    },
+    "activeUserProfile": {
+      "pointsBreakdown": {
+        "donating": 0,
+        "reporting": 0,
+        "verifying": 0
+      },
+      "badges": [
+        "New Citizen"
+      ],
+      "totalPoints": 100,
+      "streakDays": 1,
+      "id": "kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+      "citizensHelped": 0,
+      "role": "CITIZEN",
+      "availableFunds": 5000,
+      "location": "Indiranagar, Bengaluru",
+      "personalActiveScore": 50,
+      "civicScore": 700,
+      "contributionCount": 0,
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+      "name": "CosmicResident_5011",
+      "totalDonations": 0
+    },
+    "citizenProfile": {
+      "streakDays": 1,
+      "id": "kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+      "totalPoints": 100,
+      "pointsBreakdown": {
+        "donating": 0,
+        "reporting": 0,
+        "verifying": 0
+      },
+      "badges": [
+        "New Citizen"
+      ],
+      "availableFunds": 5000,
+      "role": "CITIZEN",
+      "citizensHelped": 0,
+      "personalActiveScore": 50,
+      "location": "Indiranagar, Bengaluru",
+      "totalDonations": 0,
+      "name": "CosmicResident_5011",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+      "contributionCount": 0,
+      "civicScore": 700
+    },
+    "kEnFokN1mEhpkFfn2RXbWyJ6H5H2": {
+      "totalPoints": 100,
+      "badges": [
+        "New Citizen"
+      ],
+      "pointsBreakdown": {
+        "donating": 0,
+        "reporting": 0,
+        "verifying": 0
+      },
+      "wardName": "Ward 45",
+      "streakDays": 1,
+      "id": "kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+      "citizensHelped": 0,
+      "role": "CITIZEN",
+      "availableFunds": 5000,
+      "longitude": 72.8465408,
+      "location": "Andheri East, Mumbai",
+      "latitude": 19.1004672,
+      "personalActiveScore": 50,
+      "contributionCount": 0,
+      "civicScore": 700,
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=kEnFokN1mEhpkFfn2RXbWyJ6H5H2",
+      "name": "CosmicResident_5011",
+      "totalDonations": 0
+    },
+    "org-green-bengaluru": {
+      "location": "Bengaluru, National Zone",
+      "carbonCredits": 55000,
+      "personalActiveScore": 98,
+      "contributionCount": 840,
+      "civicScore": 950,
+      "adoptedWards": [
+        "Ward 88 - Indiranagar",
+        "Ward 12 - Koramangala"
+      ],
+      "name": "Green_Bengaluru_RWA",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=green",
+      "totalDonations": 250000,
+      "totalPoints": 45900,
+      "pointsBreakdown": {
+        "donating": 10900,
+        "reporting": 20000,
+        "verifying": 15000
+      },
+      "badges": [
+        "National Legend",
+        "CSR Platinum Partner"
+      ],
+      "id": "org-green-bengaluru",
+      "streakDays": 45,
+      "citizensHelped": 125000,
+      "role": "ORGANIZATION",
+      "availableFunds": 45000
+    },
+    "org-green-ward": {
+      "badges": [
+        "Eco Guardian",
+        "Ward Adoptive Leader",
+        "Gold ESG Rating",
+        "CSR Platinum Partner"
+      ],
+      "pointsBreakdown": {
+        "donating": 3000,
+        "reporting": 3500,
+        "verifying": 2000
+      },
+      "totalPoints": 8500,
+      "streakDays": 28,
+      "id": "org-green-ward",
+      "citizensHelped": 12450,
+      "role": "ORGANIZATION",
+      "availableFunds": 15000,
+      "location": "North Bengaluru, Ward 42",
+      "carbonCredits": 12450,
+      "personalActiveScore": 95,
+      "civicScore": 920,
+      "contributionCount": 156,
+      "adoptedWards": [
+        "Ward 42, North Zone",
+        "Ward 18, Central",
+        "Ward 05, East Zone"
+      ],
+      "avatar": "https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=150&q=80",
+      "name": "Green Ward Foundation",
+      "totalDonations": 45000
+    },
+    "org-indiranagar-rotary": {
+      "id": "org-indiranagar-rotary",
+      "streakDays": 14,
+      "totalPoints": 4100,
+      "badges": [
+        "Ward Adoptive Leader",
+        "Gold ESG Rating"
+      ],
+      "pointsBreakdown": {
+        "donating": 1000,
+        "reporting": 1800,
+        "verifying": 1300
+      },
+      "availableFunds": 12000,
+      "citizensHelped": 5400,
+      "role": "ORGANIZATION",
+      "personalActiveScore": 82,
+      "location": "Indiranagar, Bengaluru",
+      "carbonCredits": 5400,
+      "name": "Indiranagar Rotary Club",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=rotary",
+      "totalDonations": 35000,
+      "contributionCount": 65,
+      "civicScore": 850,
+      "adoptedWards": [
+        "Ward 88 - Indiranagar"
+      ]
+    },
+    "org-tata-csr": {
+      "name": "Tata CSR Sanitation",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=tata",
+      "totalDonations": 80000,
+      "contributionCount": 120,
+      "civicScore": 890,
+      "adoptedWards": [
+        "Ward 88 - Indiranagar"
+      ],
+      "personalActiveScore": 90,
+      "location": "Indiranagar, Bengaluru",
+      "carbonCredits": 10800,
+      "availableFunds": 25000,
+      "citizensHelped": 10800,
+      "role": "ORGANIZATION",
+      "id": "org-tata-csr",
+      "streakDays": 20,
+      "totalPoints": 7200,
+      "pointsBreakdown": {
+        "donating": 1700,
+        "verifying": 2500,
+        "reporting": 3000
+      },
+      "badges": [
+        "Eco Guardian",
+        "Ward Adoptive Leader"
+      ]
+    },
+    "orgProfile": {
+      "location": "North Bengaluru, Ward 42",
+      "carbonCredits": 12450,
+      "personalActiveScore": 95,
+      "contributionCount": 156,
+      "civicScore": 920,
+      "adoptedWards": [
+        "Ward 42, North Zone",
+        "Ward 18, Central",
+        "Ward 05, East Zone"
+      ],
+      "avatar": "https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=150&q=80",
+      "name": "Green Ward Foundation",
+      "totalDonations": 45000,
+      "totalPoints": 8500,
+      "pointsBreakdown": {
+        "verifying": 2000,
+        "reporting": 3500,
+        "donating": 3000
+      },
+      "badges": [
+        "Eco Guardian",
+        "Ward Adoptive Leader",
+        "Gold ESG Rating",
+        "CSR Platinum Partner"
+      ],
+      "streakDays": 28,
+      "id": "org-green-ward",
+      "citizensHelped": 12450,
+      "role": "ORGANIZATION",
+      "availableFunds": 15000
+    },
+    "user-ananya-k": {
+      "pointsBreakdown": {
+        "donating": 200,
+        "reporting": 450,
+        "verifying": 300
+      },
+      "badges": [
+        "Active Citizen"
+      ],
+      "totalPoints": 950,
+      "id": "user-ananya-k",
+      "streakDays": 3,
+      "role": "CITIZEN",
+      "citizensHelped": 400,
+      "availableFunds": 800,
+      "location": "Indiranagar, Bengaluru",
+      "personalActiveScore": 65,
+      "civicScore": 680,
+      "contributionCount": 15,
+      "totalDonations": 500,
+      "name": "Ananya_K",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=ananya"
+    },
+    "user-karan-goel": {
+      "role": "CITIZEN",
+      "citizensHelped": 1800,
+      "availableFunds": 1000,
+      "badges": [
+        "Grand Guardian",
+        "Streak Champion"
+      ],
+      "pointsBreakdown": {
+        "verifying": 1000,
+        "reporting": 1500,
+        "donating": 450
+      },
+      "totalPoints": 2950,
+      "id": "user-karan-goel",
+      "streakDays": 12,
+      "civicScore": 840,
+      "contributionCount": 58,
+      "totalDonations": 4000,
+      "name": "Karan_Goel",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=karan",
+      "location": "Indiranagar, Bengaluru",
+      "personalActiveScore": 90
+    },
+    "user-meera-nair": {
+      "personalActiveScore": 88,
+      "location": "Indiranagar, Bengaluru",
+      "totalDonations": 3000,
+      "name": "Meera_Nair",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=meera",
+      "contributionCount": 45,
+      "civicScore": 810,
+      "id": "user-meera-nair",
+      "streakDays": 8,
+      "totalPoints": 2710,
+      "pointsBreakdown": {
+        "donating": 710,
+        "reporting": 1200,
+        "verifying": 800
+      },
+      "badges": [
+        "Clean Ward Hero",
+        "First Responder"
+      ],
+      "availableFunds": 1500,
+      "role": "CITIZEN",
+      "citizensHelped": 1100
+    },
+    "user-rahul-sharma": {
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+      "name": "Rahul Sharma",
+      "totalDonations": 6500,
+      "contributionCount": 42,
+      "civicScore": 740,
+      "personalActiveScore": 85,
+      "location": "Indiranagar, Bengaluru",
+      "availableFunds": 2500,
+      "citizensHelped": 1240,
+      "role": "CITIZEN",
+      "id": "user-rahul-sharma",
+      "streakDays": 14,
+      "totalPoints": 1850,
+      "badges": [
+        "First Responder",
+        "Verified Eye",
+        "Streak Champion",
+        "Safety Auditor",
+        "Top Donor"
+      ],
+      "pointsBreakdown": {
+        "reporting": 850,
+        "verifying": 600,
+        "donating": 400
+      }
+    },
+    "user-suresh-k": {
+      "availableFunds": 500,
+      "role": "CITIZEN",
+      "citizensHelped": 800,
+      "streakDays": 5,
+      "id": "user-suresh-k",
+      "totalPoints": 1620,
+      "pointsBreakdown": {
+        "verifying": 500,
+        "reporting": 700,
+        "donating": 420
+      },
+      "badges": [
+        "Local Sentinel",
+        "Verified Eye"
+      ],
+      "totalDonations": 1500,
+      "name": "Suresh_K",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=suresh",
+      "contributionCount": 22,
+      "civicScore": 710,
+      "personalActiveScore": 75,
+      "location": "Domlur, Bengaluru"
+    }
+  },
+  "whatsappVerificationTokens": {
+    "tok_lscd2xeo": {
+      "token": "tok_lscd2xeo",
+      "phone": "+917777777777",
+      "expiresAt": "2026-06-30T08:20:28.714Z"
+    }
+  }
+}

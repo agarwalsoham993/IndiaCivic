@@ -89,6 +89,39 @@ export default function ProfileView({
   const [profileTab, setProfileTab] = useState<"dashboard" | "settings">("dashboard");
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // WhatsApp states
+  const [whatsappHandshakeCode, setWhatsappHandshakeCode] = useState<string | null>(null);
+  const [isRequestingHandshake, setIsRequestingHandshake] = useState(false);
+
+  const handleRequestHandshake = async () => {
+    setIsRequestingHandshake(true);
+    try {
+      const response = await fetch("/api/whatsapp/request-handshake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setWhatsappHandshakeCode(data.code);
+        
+        // Auto-refresh profile every 3 seconds to check if they completed verification
+        const interval = setInterval(async () => {
+          if (onRefreshProfile) {
+            onRefreshProfile();
+          }
+        }, 3000);
+        
+        // Stop checking after 5 mins
+        setTimeout(() => clearInterval(interval), 300000);
+      }
+    } catch (err) {
+      console.error("Error requesting handshake code:", err);
+    } finally {
+      setIsRequestingHandshake(false);
+    }
+  };
+
   // Precise Location selection modal states
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [locationQuery, setLocationQuery] = useState("");
@@ -608,6 +641,73 @@ export default function ProfileView({
             </div>
           </div>
 
+          {/* WhatsApp Integration Card */}
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-md relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black tracking-widest uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  WhatsApp Bot Connection
+                </span>
+                <h4 className="text-md font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+                  {user.whatsappNumber && user.whatsappVerified ? "WhatsApp Linked Successfully" : "Connect WhatsApp Account"}
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                  {user.whatsappNumber && user.whatsappVerified 
+                    ? `Your account is connected to ${user.whatsappNumber}. You will receive instant notifications and updates on reported issues directly on WhatsApp.`
+                    : "Report municipal issues and upvote citizen tickets on-the-go. Link your account to claim +50 reward points automatically!"}
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 shrink-0 shadow-xs">
+                <svg className="h-5 w-5 fill-emerald-600 dark:fill-emerald-400" viewBox="0 0 24 24">
+                  <path d="M12.004 2C6.48 2 2 6.48 2 12.004c0 1.908.533 3.69 1.458 5.215L2.022 22l4.908-1.411A9.972 9.972 0 0 0 12.004 22c5.524 0 10.004-4.48 10.004-10.004C22.008 6.48 17.528 2 12.004 2zm0 18.008c-1.674 0-3.238-.451-4.593-1.236l-.33-.191-2.906.837.85-2.784-.213-.338a8.006 8.006 0 0 1-1.229-4.298c0-4.417 3.593-8.008 8.008-8.008s8.008 3.591 8.008 8.008c-.004 4.421-3.597 8.012-8.118 8.012z"/>
+                </svg>
+              </div>
+            </div>
+
+            {user.whatsappNumber && user.whatsappVerified ? (
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 border border-white dark:border-slate-900 shadow-xs" />
+                  Active Number: {user.whatsappNumber}
+                </span>
+                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-wider">Verified</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {whatsappHandshakeCode ? (
+                  <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-150 dark:border-indigo-900/50 rounded-2xl space-y-3">
+                    <div className="text-center space-y-1">
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-450 block">Your Handshake Code:</span>
+                      <span className="text-2xl font-black font-mono tracking-widest text-indigo-700 dark:text-indigo-400 select-all">{whatsappHandshakeCode}</span>
+                      <span className="text-[9px] text-indigo-550 dark:text-indigo-400 font-bold block">Expires in 5 minutes</span>
+                    </div>
+                    
+                    <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-150 dark:border-emerald-900/40 rounded-xl space-y-2 text-[11px] text-emerald-800 dark:text-emerald-350">
+                      <p className="font-bold">Instructions:</p>
+                      <ol className="list-decimal list-inside space-y-1 font-semibold">
+                        <li>Send the handshake code message to our official WhatsApp bot.</li>
+                        <li>Send exactly: <strong className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded select-all text-xs text-indigo-700 dark:text-indigo-400 font-black">Verify {whatsappHandshakeCode}</strong></li>
+                        <li>To: <strong className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded select-all text-xs text-indigo-700 dark:text-indigo-400 font-black">+91 90123 45678</strong></li>
+                      </ol>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestHandshake}
+                    disabled={isRequestingHandshake}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2 disabled:opacity-75"
+                  >
+                    <span>Connect WhatsApp Bot</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Community impact visual payoff card */}
           <div className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-md transition-all duration-300">
             {/* Glowing neon green background orb for visual hierarchy */}
@@ -858,6 +958,73 @@ export default function ProfileView({
               <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase block tracking-wider">CSR WARD RESOLUTIONS</span>
               <span className="text-lg font-black text-slate-800 dark:text-slate-100 font-mono">{user.contributionCount} Projects</span>
             </div>
+          </div>
+
+          {/* WhatsApp Integration Card */}
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-md relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black tracking-widest uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  WhatsApp Bot Connection
+                </span>
+                <h4 className="text-md font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+                  {user.whatsappNumber && user.whatsappVerified ? "WhatsApp Linked Successfully" : "Connect WhatsApp Account"}
+                </h4>
+                <p className="text-xs text-slate-550 dark:text-slate-400 leading-relaxed font-medium">
+                  {user.whatsappNumber && user.whatsappVerified 
+                    ? `Your account is connected to ${user.whatsappNumber}. You will receive instant notifications and updates on reported issues directly on WhatsApp.`
+                    : "Report municipal issues and upvote citizen tickets on-the-go. Link your account to claim +50 reward points automatically!"}
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 shrink-0 shadow-xs">
+                <svg className="h-5 w-5 fill-emerald-600 dark:fill-emerald-400" viewBox="0 0 24 24">
+                  <path d="M12.004 2C6.48 2 2 6.48 2 12.004c0 1.908.533 3.69 1.458 5.215L2.022 22l4.908-1.411A9.972 9.972 0 0 0 12.004 22c5.524 0 10.004-4.48 10.004-10.004C22.008 6.48 17.528 2 12.004 2zm0 18.008c-1.674 0-3.238-.451-4.593-1.236l-.33-.191-2.906.837.85-2.784-.213-.338a8.006 8.006 0 0 1-1.229-4.298c0-4.417 3.593-8.008 8.008-8.008s8.008 3.591 8.008 8.008c-.004 4.421-3.597 8.012-8.118 8.012z"/>
+                </svg>
+              </div>
+            </div>
+
+            {user.whatsappNumber && user.whatsappVerified ? (
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 border border-white dark:border-slate-900 shadow-xs" />
+                  Active Number: {user.whatsappNumber}
+                </span>
+                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-wider">Verified</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {whatsappHandshakeCode ? (
+                  <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-150 dark:border-indigo-900/50 rounded-2xl space-y-3">
+                    <div className="text-center space-y-1">
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-450 block">Your Handshake Code:</span>
+                      <span className="text-2xl font-black font-mono tracking-widest text-indigo-700 dark:text-indigo-400 select-all">{whatsappHandshakeCode}</span>
+                      <span className="text-[9px] text-indigo-550 dark:text-indigo-400 font-bold block">Expires in 5 minutes</span>
+                    </div>
+                    
+                    <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-150 dark:border-emerald-900/40 rounded-xl space-y-2 text-[11px] text-emerald-800 dark:text-emerald-350">
+                      <p className="font-bold">Instructions:</p>
+                      <ol className="list-decimal list-inside space-y-1 font-semibold">
+                        <li>Send the handshake code message to our official WhatsApp bot.</li>
+                        <li>Send exactly: <strong className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded select-all text-xs text-indigo-700 dark:text-indigo-400 font-black">Verify {whatsappHandshakeCode}</strong></li>
+                        <li>To: <strong className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded select-all text-xs text-indigo-700 dark:text-indigo-400 font-black">+91 90123 45678</strong></li>
+                      </ol>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestHandshake}
+                    disabled={isRequestingHandshake}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2 disabled:opacity-75"
+                  >
+                    <span>Connect WhatsApp Bot</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Carbon Credit Tracker */}

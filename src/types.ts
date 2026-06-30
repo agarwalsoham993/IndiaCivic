@@ -118,4 +118,10 @@ export interface UserProfile {
   wardName?: string;
   latitude?: number;
   longitude?: number;
+  whatsappNumber?: string;
+  whatsappVerified?: boolean;
+  whatsappCode?: {
+    code: string;
+    expiresAt: string;
+  };
 }

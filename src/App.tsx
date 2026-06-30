@@ -38,7 +38,7 @@ import {
   Moon
 } from "lucide-react";
 
-import { Issue, Campaign, UserProfile, Comment, Donation } from "./types";
+import { Issue, Campaign, UserProfile, Donation, Comment } from "./types";
 import HomeView from "./components/HomeView";
 import MapsView from "./components/MapsView";
 import ReportView from "./components/ReportView";
@@ -222,6 +222,37 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [signUpRole, setSignUpRole] = useState<'CITIZEN' | 'ORGANIZATION'>('CITIZEN');
 
+  // WhatsApp integration states
+  const [pendingWhatsappLink, setPendingWhatsappLink] = useState<{ token: string; phone: string } | null>(null);
+
+  const handleMergeWhatsapp = async (token: string, phone: string, userId: string) => {
+    try {
+      const response = await fetch("/api/whatsapp/merge-guest-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, phone, userId })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccessMsg(`🎉 Success! We matched your WhatsApp number ${phone} and linked ${data.mergedIssuesCount} previous reports. You earned +${data.pointsAwarded} civic points!`);
+        loadAllData();
+      } else {
+        setErrorMsg(data.error || "Failed to merge WhatsApp reports.");
+      }
+    } catch (err) {
+      console.error("Error merging WhatsApp reports:", err);
+      setErrorMsg("Failed to connect with WhatsApp verification service.");
+    } finally {
+      setPendingWhatsappLink(null);
+    }
+  };
+
+  useEffect(() => {
+    if (userProfile && userProfile.id !== "guest" && pendingWhatsappLink) {
+      handleMergeWhatsapp(pendingWhatsappLink.token, pendingWhatsappLink.phone, userProfile.id);
+    }
+  }, [userProfile, pendingWhatsappLink]);
+
   const isGuest = !userProfile || userProfile.id === "guest";
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -244,6 +275,11 @@ export default function App() {
       const error = params.get("error") || undefined;
       const activeTabParam = params.get("activeTab");
 
+      const waToken = params.get("whatsappToken");
+      const waPhone = params.get("whatsappPhone");
+
+      let cleanUrlNeeded = false;
+
       if (status) {
         setPaymentStatus({ status: status as any, amount, error });
         if (activeTabParam) {
@@ -251,7 +287,31 @@ export default function App() {
         } else {
           setActiveTab("campaigns");
         }
-        // Clean URL parameters cleanly so it doesn't reappear on refresh
+        cleanUrlNeeded = true;
+      }
+
+      if (waToken && waPhone) {
+        fetch(`/api/whatsapp/verify-token?token=${waToken}&phone=${encodeURIComponent(waPhone)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.valid) {
+              setPendingWhatsappLink({ token: waToken, phone: waPhone });
+              if (!userProfile || userProfile.id === "guest") {
+                setAuthMode("signup");
+                setShowAuthModal(true);
+                setSuccessMsg(`We found reports associated with WhatsApp number ${waPhone}. Please sign up or log in to link them!`);
+              }
+            } else {
+              setErrorMsg("The WhatsApp verification link has expired or is invalid.");
+            }
+          })
+          .catch(e => {
+            console.error("Error verifying token", e);
+          });
+        cleanUrlNeeded = true;
+      }
+
+      if (cleanUrlNeeded) {
         const newUrl = window.location.pathname + (window.location.hash || "");
         window.history.replaceState({}, document.title, newUrl);
       }

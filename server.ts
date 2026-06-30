@@ -2047,57 +2047,423 @@ app.post("/api/profile/logout", (req, res) => {
 // --------------------------------------------------------
 // Real Automated WhatsApp Bot Integration Webhook
 // --------------------------------------------------------
+// --------------------------------------------------------
+// Real Automated WhatsApp Bot Integration Webhook
+// --------------------------------------------------------
+function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c;
+}
+
+function calculateSimilarity(str1: string, str2: string): number {
+  const words1 = new Set(str1.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2));
+  const words2 = new Set(str2.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2));
+  if (words1.size === 0 || words2.size === 0) return 0;
+  
+  const intersection = new Set([...words1].filter(x => words2.has(x)));
+  const union = new Set([...words1, ...words2]);
+  return intersection.size / union.size;
+}
+
+// 1. Handshake Code Request (Web App -> WhatsApp)
+app.post("/api/whatsapp/request-handshake", (req, res) => {
+  db = loadDatabase();
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+
+  // Generate random 6 digit code
+  const code = "WA-" + Math.floor(100000 + Math.random() * 900000);
+  
+  if (!db.activeUserProfile) {
+    return res.status(400).json({ error: "No active profile found" });
+  }
+
+  const expiry = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min expiry
+  
+  db.activeUserProfile.whatsappCode = { code, expiresAt: expiry };
+  
+  if (db.profiles && db.profiles[userId]) {
+    db.profiles[userId].whatsappCode = { code, expiresAt: expiry };
+  }
+
+  saveDatabase(db);
+  res.json({ success: true, code });
+});
+
+// 2. Token Verification (Web App Validation)
+app.get("/api/whatsapp/verify-token", (req, res) => {
+  db = loadDatabase();
+  const { token, phone } = req.query;
+  if (!token || !phone) {
+    return res.status(400).json({ error: "Missing token or phone" });
+  }
+
+  const tokenMap = (db as any).whatsappVerificationTokens || {};
+  const activeToken = tokenMap[token as string];
+
+  if (!activeToken) {
+    return res.json({ valid: false, message: "Token not found" });
+  }
+
+  if (activeToken.phone !== phone) {
+    return res.json({ valid: false, message: "Phone mismatch" });
+  }
+
+  if (new Date(activeToken.expiresAt) < new Date()) {
+    return res.json({ valid: false, message: "Token expired" });
+  }
+
+  res.json({ valid: true });
+});
+
+// 3. Merge Guest Reports (Verification Successful -> User Logged in -> Claim rewards)
+app.post("/api/whatsapp/merge-guest-reports", async (req, res) => {
+  db = loadDatabase();
+  const { token, phone, userId } = req.body;
+  
+  if (!token || !phone || !userId) {
+    return res.status(400).json({ error: "Missing token, phone, or userId" });
+  }
+
+  const tokenMap = (db as any).whatsappVerificationTokens || {};
+  const activeToken = tokenMap[token];
+
+  if (!activeToken || activeToken.phone !== phone || new Date(activeToken.expiresAt) < new Date()) {
+    return res.status(400).json({ error: "Invalid, expired, or mismatching token" });
+  }
+
+  // Remove the token so it's single use
+  delete tokenMap[token];
+  (db as any).whatsappVerificationTokens = tokenMap;
+
+  // Retrieve user profile
+  let userProfile = db.profiles ? db.profiles[userId] : null;
+  if (!userProfile && db.activeUserProfile?.id === userId) {
+    userProfile = db.activeUserProfile;
+  }
+
+  if (!userProfile) {
+    return res.status(404).json({ error: "User profile not found" });
+  }
+
+  // Link WhatsApp phone to profile
+  userProfile.whatsappNumber = phone;
+  userProfile.whatsappVerified = true;
+  if (userProfile.whatsappCode) {
+    delete userProfile.whatsappCode;
+  }
+
+  if (db.activeUserProfile?.id === userId) {
+    db.activeUserProfile.whatsappNumber = phone;
+    db.activeUserProfile.whatsappVerified = true;
+    if (db.activeUserProfile.whatsappCode) {
+      delete db.activeUserProfile.whatsappCode;
+    }
+  }
+
+  if (db.profiles && db.profiles[userId]) {
+    db.profiles[userId] = userProfile;
+  }
+
+  // Find guest reports with this phone number
+  let mergedIssuesCount = 0;
+  let accumulatedPoints = 0;
+
+  db.issues.forEach(issue => {
+    // Check if the issue was reported by a guest from this phone number
+    if (issue.reporterId === "guest" && (issue as any).whatsappRawNumber === phone) {
+      issue.reporterId = userId;
+      issue.reporterName = userProfile!.name;
+      mergedIssuesCount++;
+      accumulatedPoints += 50; // 50 points per report
+    }
+    
+    // Also check if they upvoted/verified other issues as a guest
+    const guestVoterId = "wa_" + phone;
+    if (issue.votedUserIds.includes(guestVoterId)) {
+      issue.votedUserIds = issue.votedUserIds.map(vId => vId === guestVoterId ? userId : vId);
+      accumulatedPoints += 15; // 15 points per verification
+    }
+  });
+
+  // Credit user profile
+  userProfile.totalPoints += accumulatedPoints;
+  userProfile.contributionCount += mergedIssuesCount;
+  if (!userProfile.pointsBreakdown) {
+    userProfile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
+  }
+  userProfile.pointsBreakdown.reporting += accumulatedPoints;
+
+  if (db.activeUserProfile?.id === userId) {
+    db.activeUserProfile = userProfile;
+  }
+  if (userProfile.role === "CITIZEN") {
+    db.citizenProfile = userProfile;
+  } else {
+    db.orgProfile = userProfile;
+  }
+
+  saveDatabase(db);
+
+  try {
+    await setDoc(doc(firestore, "profiles", userId), userProfile);
+    for (const issue of db.issues) {
+      if (issue.reporterId === userId) {
+        await setDoc(doc(firestore, "issues", issue.id), issue);
+      }
+    }
+  } catch (fsErr) {
+    console.error("Firestore sync error during whatsapp merge:", fsErr);
+  }
+
+  res.json({
+    success: true,
+    mergedIssuesCount,
+    pointsAwarded: accumulatedPoints,
+    profile: userProfile
+  });
+});
+
+// 4. Primary Inbound Webhook
 app.post("/webhook/whatsapp-trigger", async (req, res) => {
   db = loadDatabase();
   try {
-    const { reporterUid, reporterName, parsedPayload } = req.body;
-    if (!parsedPayload || !parsedPayload.title) {
-      return res.status(400).json({ error: "Missing parsed payload or title in whatsapp-trigger request" });
+    const { from, body, latitude, longitude, imageUrl } = req.body;
+    
+    // Support the legacy parsedPayload structure if it is sent
+    if (req.body.parsedPayload && req.body.parsedPayload.title) {
+      return handleLegacyWhatsappPayload(req, res);
     }
 
+    if (!from || !body) {
+      return res.status(400).json({ error: "Missing required fields 'from' or 'body'" });
+    }
+
+    const messageText = body.trim();
+
+    // 1. Check if it is a Handshake/Verification message
+    const isVerificationCode = messageText.toUpperCase().startsWith("WA-") || 
+                               messageText.toUpperCase().startsWith("VERIFY WA-");
+    
+    if (isVerificationCode) {
+      let code = messageText.toUpperCase();
+      if (code.startsWith("VERIFY ")) {
+        code = code.replace("VERIFY ", "");
+      }
+      code = code.trim();
+
+      let matchedUserId: string | null = null;
+      let matchedProfile: UserProfile | null = null;
+
+      if (db.profiles) {
+        for (const [uid, p] of Object.entries(db.profiles)) {
+          if (p.whatsappCode?.code === code) {
+            const expiry = new Date(p.whatsappCode.expiresAt);
+            if (expiry > new Date()) {
+              matchedUserId = uid;
+              matchedProfile = p;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!matchedUserId && db.activeUserProfile?.whatsappCode?.code === code) {
+        const expiry = new Date(db.activeUserProfile.whatsappCode.expiresAt);
+        if (expiry > new Date()) {
+          matchedUserId = db.activeUserProfile.id;
+          matchedProfile = db.activeUserProfile;
+        }
+      }
+
+      if (matchedUserId && matchedProfile) {
+        matchedProfile.whatsappNumber = from;
+        matchedProfile.whatsappVerified = true;
+        delete matchedProfile.whatsappCode;
+
+        if (db.activeUserProfile?.id === matchedUserId) {
+          db.activeUserProfile.whatsappNumber = from;
+          db.activeUserProfile.whatsappVerified = true;
+          delete db.activeUserProfile.whatsappCode;
+        }
+        if (db.profiles && db.profiles[matchedUserId]) {
+          db.profiles[matchedUserId] = matchedProfile;
+        }
+
+        saveDatabase(db);
+
+        try {
+          await setDoc(doc(firestore, "profiles", matchedUserId), matchedProfile);
+        } catch (e) {
+          console.error("Firestore error updating linked profile:", e);
+        }
+
+        return res.json({
+          reply: `🎉 Success! Your WhatsApp number has been successfully linked to your profile (${matchedProfile.name}). You will receive real-time notifications about your tickets here!`
+        });
+      } else {
+        return res.json({
+          reply: "❌ Invalid or expired verification code. Please request a new code from the web application under your profile page."
+        });
+      }
+    }
+
+    // 2. Treat as incoming Civic Issue Report
+    let analysisResult: any;
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey && apiKey !== "MY_GEMINI_API_KEY") {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const responseSchema = {
+          type: Type.OBJECT,
+          properties: {
+            category: { type: Type.STRING },
+            title: { type: Type.STRING },
+            refinedDescription: { type: Type.STRING },
+            severity: { type: Type.INTEGER },
+            department: { type: Type.STRING },
+            representative: { type: Type.STRING },
+            ward: { type: Type.STRING }
+          },
+          required: ["category", "title", "refinedDescription", "severity", "department", "representative", "ward"]
+        };
+        const aiRes = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: `Analyze this WhatsApp text: "${messageText}". Map it to civic categories, assign BBMP department, find Indiranagar ward, score severity 1-5, and create a 5-word title.`,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
+          }
+        });
+        analysisResult = JSON.parse(aiRes.text);
+      } catch (err) {
+        console.warn("AI parsing failed in WhatsApp trigger, using rule fallback", err);
+        analysisResult = parseFallbackText(messageText);
+      }
+    } else {
+      analysisResult = parseFallbackText(messageText);
+    }
+
+    const lat = Number(latitude) || 12.9716;
+    const lng = Number(longitude) || 77.6412;
+
+    // Check duplicate rule
+    let duplicateIssue: Issue | null = null;
+    for (const issue of db.issues) {
+      if (issue.category === analysisResult.category) {
+        const distance = getDistanceInMeters(issue.latitude, issue.longitude, lat, lng);
+        if (distance <= 100) {
+          const similarityScore = calculateSimilarity(issue.description, messageText);
+          if (similarityScore > 0.5) {
+            duplicateIssue = issue;
+            break;
+          }
+        }
+      }
+    }
+
+    if (duplicateIssue) {
+      const voterId = "wa_" + from;
+      if (duplicateIssue.votedUserIds.includes(voterId)) {
+        return res.json({
+          reply: `📢 You have already upvoted this issue! We have it logged under Tracking ID: ${duplicateIssue.trackingId}. The municipal department is processing it. Current Support: ${duplicateIssue.upvotes} upvotes.`
+        });
+      }
+
+      duplicateIssue.votedUserIds.push(voterId);
+      duplicateIssue.upvotes += 1;
+      duplicateIssue.agreeVotes += 1;
+
+      saveDatabase(db);
+      
+      try {
+        await setDoc(doc(firestore, "issues", duplicateIssue.id), duplicateIssue);
+      } catch (e) {
+        console.error("Firestore sync error upvoting issue:", e);
+      }
+
+      return res.json({
+        reply: `📍 We found an existing report for this exact issue in your area (Tracking ID: ${duplicateIssue.trackingId}).\n\nTo increase priority, we have added your verification and upvoted it! Total upvotes: ${duplicateIssue.upvotes}.\n\nThank you for corroborating this concern!`
+      });
+    }
+
+    // Create a new report
     const issueId = "issue_" + Date.now();
-    const trackingId = parsedPayload.trackingId || `CIVIC-${Math.floor(100000 + Math.random() * 900000)}`;
+    const trackingId = `CIVIC-${Math.floor(100000 + Math.random() * 900000)}`;
+    
+    let reporterId = "guest";
+    let reporterName = "WhatsApp Citizen";
+    
+    if (db.profiles) {
+      for (const [uid, p] of Object.entries(db.profiles)) {
+        if (p.whatsappNumber === from && p.whatsappVerified) {
+          reporterId = uid;
+          reporterName = p.name;
+          break;
+        }
+      }
+    }
+    if (reporterId === "guest" && db.activeUserProfile?.whatsappNumber === from && db.activeUserProfile?.whatsappVerified) {
+      reporterId = db.activeUserProfile.id;
+      reporterName = db.activeUserProfile.name;
+    }
+
     const newIssue: Issue = {
       id: issueId,
       trackingId: trackingId,
-      category: parsedPayload.category || "Waste Management",
-      title: parsedPayload.title,
-      description: parsedPayload.description || "",
-      locationName: parsedPayload.locationName || "Indiranagar, Bengaluru",
-      latitude: Number(parsedPayload.latitude) || 12.9716,
-      longitude: Number(parsedPayload.longitude) || 77.6412,
+      category: analysisResult.category || "Waste Management",
+      title: analysisResult.title || "Civic Issue",
+      description: messageText,
+      locationName: "Indiranagar, Bengaluru",
+      latitude: lat,
+      longitude: lng,
       timestamp: new Date().toISOString(),
       status: "PENDING",
-      severity: Number(parsedPayload.severity) || 3,
-      imageUrl: parsedPayload.imageUrl || "",
-      isAnonymous: parsedPayload.isAnonymous || false,
-      reporterName: reporterName || "WhatsApp Citizen",
+      severity: Number(analysisResult.severity) || 3,
+      imageUrl: imageUrl || "",
+      isAnonymous: false,
+      reporterName: reporterName,
       virtualAssetId: "sector-2",
-      upvotes: 0,
-      agreeVotes: 0,
+      upvotes: 1,
+      agreeVotes: 1,
       disagreeVotes: 0,
-      votedUserIds: [],
-      evidenceLinks: parsedPayload.evidenceLinks || [],
+      votedUserIds: ["wa_" + from],
+      evidenceLinks: imageUrl ? [imageUrl] : [],
       corroborations: [],
-      ward: parsedPayload.ward || "Indiranagar Ward 88",
-      department: parsedPayload.department || "BBMP Solid Waste Management",
-      representative: parsedPayload.representative || "Ward Corporator",
-      reporterId: reporterUid || "guest"
+      ward: analysisResult.ward || "Indiranagar Ward 88",
+      department: analysisResult.department || "BBMP Solid Waste Management",
+      representative: analysisResult.representative || "Ward Corporator",
+      reporterId: reporterId
     };
+
+    (newIssue as any).whatsappRawNumber = from;
 
     db.issues.unshift(newIssue);
 
-    // Reward points
-    if (reporterUid && reporterUid !== "guest") {
-      if (db.profiles && db.profiles[reporterUid]) {
-        db.profiles[reporterUid].totalPoints += 50;
-        db.profiles[reporterUid].contributionCount += 1;
-        if (!db.profiles[reporterUid].pointsBreakdown) {
-          db.profiles[reporterUid].pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
+    if (reporterId !== "guest") {
+      let profile = db.profiles ? db.profiles[reporterId] : null;
+      if (profile) {
+        profile.totalPoints += 50;
+        profile.contributionCount += 1;
+        if (!profile.pointsBreakdown) {
+          profile.pointsBreakdown = { reporting: 0, verifying: 0, donating: 0 };
         }
-        db.profiles[reporterUid].pointsBreakdown.reporting += 50;
+        profile.pointsBreakdown.reporting += 50;
       }
-      if (db.activeUserProfile && db.activeUserProfile.id === reporterUid) {
+      if (db.activeUserProfile?.id === reporterId) {
         db.activeUserProfile.totalPoints += 50;
         db.activeUserProfile.contributionCount += 1;
         if (!db.activeUserProfile.pointsBreakdown) {
@@ -2107,26 +2473,119 @@ app.post("/webhook/whatsapp-trigger", async (req, res) => {
       }
     }
 
+    let signupLink = "";
+    if (reporterId === "guest") {
+      const token = "tok_" + Math.random().toString(36).substring(2, 10);
+      if (!(db as any).whatsappVerificationTokens) {
+        (db as any).whatsappVerificationTokens = {};
+      }
+      (db as any).whatsappVerificationTokens[token] = {
+        token,
+        phone: from,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      };
+      
+      const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const host = req.get("host");
+      const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+      signupLink = `${appUrl}/?whatsappToken=${token}&whatsappPhone=${encodeURIComponent(from)}`;
+    }
+
     saveDatabase(db);
 
     try {
       await setDoc(doc(firestore, "issues", issueId), newIssue);
-      if (reporterUid && reporterUid !== "guest" && db.profiles && db.profiles[reporterUid]) {
-        await setDoc(doc(firestore, "profiles", reporterUid), db.profiles[reporterUid]);
-      }
-      if (db.activeUserProfile && db.activeUserProfile.id === reporterUid) {
-        await setDoc(doc(firestore, "profiles", "activeUserProfile"), db.activeUserProfile);
+      if (reporterId !== "guest") {
+        await setDoc(doc(firestore, "profiles", reporterId), db.profiles[reporterId]);
       }
     } catch (e) {
-      console.error("Firestore sync error in whatsapp-trigger:", e);
+      console.error("Firestore sync error:", e);
     }
 
-    res.json({ success: true, message: "Issue logged successfully via WhatsApp bot", issueId, trackingId });
+    const replyMsg = reporterId !== "guest" 
+      ? `✅ Thank you! Your report has been logged under Tracking ID: ${trackingId}.\n\nCategory: ${newIssue.category}\nSeverity: ${newIssue.severity}/5\n\nYour profile has been credited with +50 points!`
+      : `✅ Thank you! Your report has been logged under Tracking ID: ${trackingId}.\n\nCategory: ${newIssue.category}\nSeverity: ${newIssue.severity}/5\n\nTo view this ticket on the live map, track its status, and claim 50 civic reward points, link your profile by clicking this link:\n\n${signupLink}`;
+
+    res.json({
+      success: true,
+      message: "Issue logged via WhatsApp",
+      issueId,
+      trackingId,
+      reply: replyMsg
+    });
+
   } catch (err: any) {
-    console.error("Error processing whatsapp-trigger webhook:", err);
+    console.error("Error processing simulated WhatsApp trigger:", err);
     res.status(500).json({ error: "Internal processing error", details: err.message });
   }
 });
+
+function handleLegacyWhatsappPayload(req: any, res: any) {
+  const { reporterUid, reporterName, parsedPayload } = req.body;
+  const issueId = "issue_" + Date.now();
+  const trackingId = parsedPayload.trackingId || `CIVIC-${Math.floor(100000 + Math.random() * 900000)}`;
+  const newIssue: Issue = {
+    id: issueId,
+    trackingId,
+    category: parsedPayload.category || "Waste Management",
+    title: parsedPayload.title,
+    description: parsedPayload.description || "",
+    locationName: parsedPayload.locationName || "Indiranagar, Bengaluru",
+    latitude: Number(parsedPayload.latitude) || 12.9716,
+    longitude: Number(parsedPayload.longitude) || 77.6412,
+    timestamp: new Date().toISOString(),
+    status: "PENDING",
+    severity: Number(parsedPayload.severity) || 3,
+    imageUrl: parsedPayload.imageUrl || "",
+    isAnonymous: parsedPayload.isAnonymous || false,
+    reporterName: reporterName || "WhatsApp Citizen",
+    virtualAssetId: "sector-2",
+    upvotes: 0,
+    agreeVotes: 0,
+    disagreeVotes: 0,
+    votedUserIds: [],
+    evidenceLinks: parsedPayload.evidenceLinks || [],
+    corroborations: [],
+    ward: parsedPayload.ward || "Indiranagar Ward 88",
+    department: parsedPayload.department || "BBMP Solid Waste Management",
+    representative: parsedPayload.representative || "Ward Corporator",
+    reporterId: reporterUid || "guest"
+  };
+  db.issues.unshift(newIssue);
+  saveDatabase(db);
+  return res.json({ success: true, message: "Legacy payload processed", issueId, trackingId });
+}
+
+function parseFallbackText(text: string) {
+  const descLower = text.toLowerCase();
+  let category = "Broken Public Assets";
+  let title = "Broken Asset Reported";
+  let severity = 3;
+  let department = "Bruhat Bengaluru Mahanagara Palike (BBMP)";
+  let representative = "Nodal Ward Officer";
+  let ward = "Ward 88 - Indiranagar";
+
+  if (descLower.includes("garbage") || descLower.includes("waste") || descLower.includes("trash") || descLower.includes("litter") || descLower.includes("dump")) {
+    category = "Waste Management";
+    title = "Garbage Pile";
+    severity = 4;
+    department = "BBMP - Solid Waste Management Division";
+    representative = "Corporator Suresh Kumar (Ward 88)";
+  } else if (descLower.includes("drain") || descLower.includes("leak") || descLower.includes("water") || descLower.includes("sewage")) {
+    category = "Drainage & Waterlogging";
+    title = "Pipeline / Sewage Leak";
+    severity = 4;
+    department = "Bangalore Water Supply and Sewerage Board (BWSSB)";
+    representative = "Assistant Engineer Anand Rao";
+  } else if (descLower.includes("light") || descLower.includes("lamp") || descLower.includes("street")) {
+    category = "Broken Public Assets";
+    title = "Dead Streetlight LED";
+    severity = 3;
+    department = "BESCOM - Streetlight Cell";
+    representative = "Engineer Anjali Hegde";
+  }
+  return { category, title, refinedDescription: text, severity, department, representative, ward };
+}
 
 // --------------------------------------------------------
 // Real Gemini AI Report Analysis Integration
