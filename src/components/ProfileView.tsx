@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { UserProfile } from "../types";
 import { APIProvider, Map, AdvancedMarker } from "@vis.gl/react-google-maps";
+import jsPDF from "jspdf";
 
 // Setup Google Maps API key
 const API_KEY =
@@ -88,6 +89,7 @@ export default function ProfileView({
   const [selectedLeaderboard, setSelectedLeaderboard] = useState<"ward" | "city" | "national">("ward");
   const [profileTab, setProfileTab] = useState<"dashboard" | "settings">("dashboard");
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareBtnText, setShareBtnText] = useState("Download & Share on WhatsApp");
 
   // WhatsApp states
   const [whatsappHandshakeCode, setWhatsappHandshakeCode] = useState<string | null>(null);
@@ -304,6 +306,60 @@ export default function ProfileView({
     }
   };
 
+  const handleDownloadESGCertificate = () => {
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    pdf.setFillColor(15, 23, 42);
+    pdf.rect(0, 0, 297, 210, "F");
+    pdf.setTextColor(255, 255, 255);
+    
+    pdf.setFontSize(24);
+    pdf.text("ESG IMPACT CERTIFICATE", 148, 50, { align: "center" });
+    
+    pdf.setFontSize(14);
+    pdf.text(`Issued to: ${user.name}`, 148, 80, { align: "center" });
+    pdf.text(`Carbon Credits: ${(user.carbonCredits || 0).toLocaleString()} C`, 148, 100, { align: "center" });
+    pdf.text(`Civic Score: ${(user.civicScore || 0).toLocaleString()} XP`, 148, 115, { align: "center" });
+    pdf.text(`Date: ${new Date().toLocaleDateString("en-IN")}`, 148, 130, { align: "center" });
+    
+    pdf.text("Verified by IndiaCivic Platform — CIN: U74999KA2026OPC000001", 148, 160, { align: "center" });
+    pdf.save(`IndiaCivic_ESG_Certificate_${user.name.replace(/\s+/g, "_")}.pdf`);
+  };
+
+  const handleShareImpactCard = async () => {
+    const shareText = `🏆 I'm making Indiranagar better!\n\n` +
+      `📍 ${user.location || "My Ward"}\n` +
+      `⚡ ${user.totalPoints.toLocaleString()} Civic XP\n` +
+      `🤝 ${user.citizensHelped.toLocaleString()} neighbors helped\n` +
+      `🔥 ${user.streakDays} day streak\n\n` +
+      `Join me on IndiaCivic: https://indiacivic.app`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "My IndiaCivic Impact", text: shareText });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        setShareBtnText("Copied to Clipboard!");
+        setTimeout(() => {
+          setShareBtnText("Download & Share on WhatsApp");
+          setShowShareModal(false);
+        }, 1500);
+      }
+    } catch (err) {
+      console.warn("Share API failed, falling back", err);
+      try {
+        await navigator.clipboard.writeText(shareText);
+        setShareBtnText("Copied to Clipboard!");
+        setTimeout(() => {
+          setShareBtnText("Download & Share on WhatsApp");
+          setShowShareModal(false);
+        }, 1500);
+      } catch (e) {
+        setShareBtnText("Failed to copy/share");
+        setTimeout(() => setShareBtnText("Download & Share on WhatsApp"), 2000);
+      }
+    }
+  };
+
   // Start the verification simulation
   const startVerificationProcess = () => {
     setVerificationStep(2);
@@ -408,6 +464,12 @@ export default function ProfileView({
   };
 
   const finalOrgLeaderboard = dynamicOrgLeaderboard;
+
+  const userRankInWard = finalLeaderboards.ward.findIndex(e => e.isUser) + 1;
+  const totalWardPlayers = finalLeaderboards.ward.length;
+  const percentile = (userRankInWard && totalWardPlayers)
+    ? Math.max(1, Math.round((userRankInWard / totalWardPlayers) * 100))
+    : 5;
 
   // Render Verification Badge Status
   const renderVerificationStatusBadge = () => {
@@ -635,7 +697,7 @@ export default function ProfileView({
                 CIVIC SCORE: {user.civicScore}
               </span>
               <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-400 rounded-full text-xs font-extrabold flex items-center shadow-xs">
-                Top 5% Ward Rank
+                Top {percentile}% Ward Rank
               </span>
               {renderVerificationStatusBadge()}
             </div>
@@ -1084,7 +1146,10 @@ export default function ProfileView({
             </div>
 
             {/* Certificate downloader button */}
-            <button className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-xs uppercase flex items-center justify-center space-x-1.5 cursor-pointer shadow-md transition-all border-none">
+            <button 
+              onClick={handleDownloadESGCertificate}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-xs uppercase flex items-center justify-center space-x-1.5 cursor-pointer shadow-md transition-all border-none"
+            >
               <Download className="h-4 w-4" />
               <span>Download Verified ESG Audit Certificate</span>
             </button>
@@ -1181,10 +1246,10 @@ export default function ProfileView({
             </div>
 
             <button
-              onClick={() => setShowShareModal(false)}
+              onClick={handleShareImpactCard}
               className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs uppercase cursor-pointer shadow-sm border-none"
             >
-              <span>Download & Share on WhatsApp</span>
+              <span>{shareBtnText}</span>
             </button>
           </motion.div>
         </div>
