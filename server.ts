@@ -35,22 +35,59 @@ function getStripe(): Stripe | null {
 
 const app = express();
 const PORT = 3000;
-const DATA_FILE = path.join(process.cwd(), "data.json");
 
 app.use(express.json({ limit: "50mb" }));
 
-// Initialize Firebase SDK with provisioned credentials
+// Initialize Firebase SDK with provisioned credentials from env vars
 const firebaseConfig = {
-  apiKey: "AIzaSyAIWlQukqBMlAFrl2iTOhitGgN7knW3SR8",
-  authDomain: "gen-lang-client-0565114419.firebaseapp.com",
-  projectId: "gen-lang-client-0565114419",
-  storageBucket: "gen-lang-client-0565114419.firebasestorage.app",
-  messagingSenderId: "811492221296",
-  appId: "1:811492221296:web:a37636d87820368ec06fb5"
+  apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyAIWlQukqBMlAFrl2iTOhitGgN7knW3SR8",
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "gen-lang-client-0565114419.firebaseapp.com",
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || "gen-lang-client-0565114419",
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "gen-lang-client-0565114419.firebasestorage.app",
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "811492221296",
+  appId: process.env.VITE_FIREBASE_APP_ID || "1:811492221296:web:a37636d87820368ec06fb5"
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const firestore = getFirestore(firebaseApp, "ai-studio-84612a05-8b9c-463f-8c53-e514de638c29");
+const firestore = getFirestore(firebaseApp, process.env.VITE_FIREBASE_DATABASE_ID || "ai-studio-84612a05-8b9c-463f-8c53-e514de638c29");
+
+let db: DbSchema;
+
+// Middleware to keep in-memory cache synchronized with Firestore for every incoming HTTP request
+app.use(async (req, res, next) => {
+  // Skip syncing for static asset requests to avoid unnecessary Firestore reads
+  if (req.path.startsWith("/api") || req.path.startsWith("/webhook")) {
+    try {
+      db = await getDb();
+    } catch (err) {
+      console.error("Error synchronizing local cache from Firestore at request start:", err);
+    }
+  }
+  next();
+});
+
+// Synchronous database compatibility layer to prevent rewriting downstream handlers
+function loadDatabase(): DbSchema {
+  if (!db) {
+    db = {
+      issues: INITIAL_ISSUES,
+      campaigns: INITIAL_CAMPAIGNS,
+      activeUserProfile: DEFAULT_USER,
+      citizenProfile: DEFAULT_USER,
+      orgProfile: DEFAULT_ORG,
+      profiles: {}
+    };
+  }
+  return db;
+}
+
+function saveDatabase(targetDb: DbSchema) {
+  db = targetDb;
+  // Fire-and-forget asynchronous background commit to Firestore actual database
+  saveDb(targetDb).catch(err => {
+    console.error("Async background Firestore save failed:", err);
+  });
+}
 
 
 // --------------------------------------------------------
@@ -534,47 +571,32 @@ interface DbSchema {
   profiles?: { [uid: string]: UserProfile };
 }
 
-function loadDatabase(): DbSchema {
+async function getDb(): Promise<DbSchema> {
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      const content = fs.readFileSync(DATA_FILE, "utf-8");
-      return JSON.parse(content);
-    }
-  } catch (err) {
-    console.error("Error loading database, resetting...", err);
-  }
-
-  // Write default seed database
-  const dbProfiles: { [uid: string]: UserProfile } = {};
-  for (const p of SEED_PROFILES) {
-    dbProfiles[p.id] = p;
-  }
-  dbProfiles["user-rahul-sharma"] = DEFAULT_USER;
-  dbProfiles["org-green-ward"] = DEFAULT_ORG;
-
-  const db: DbSchema = {
-    issues: INITIAL_ISSUES,
-    campaigns: INITIAL_CAMPAIGNS,
-    activeUserProfile: DEFAULT_USER,
-    citizenProfile: DEFAULT_USER,
-    orgProfile: DEFAULT_ORG,
-    profiles: dbProfiles,
-  };
-  saveDatabase(db);
-  return db;
-}
-
-async function syncFromFirestore() {
-  try {
-    console.log("Connecting to Firestore actual database...");
-    
-    // Check if issues collection exists and has documents
     const issuesRef = collection(firestore, "issues");
     const issuesSnap = await getDocs(issuesRef);
-    
+    const issuesList: Issue[] = [];
+    issuesSnap.forEach((d) => {
+      issuesList.push(d.data() as Issue);
+    });
+    issuesList.sort((a, b) => {
+      const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return dateB - dateA;
+    });
+
     const campaignsRef = collection(firestore, "campaigns");
     const campaignsSnap = await getDocs(campaignsRef);
-    
+    const campaignsList: Campaign[] = [];
+    campaignsSnap.forEach((d) => {
+      campaignsList.push(d.data() as Campaign);
+    });
+    campaignsList.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
     const profilesRef = collection(firestore, "profiles");
     const profilesSnap = await getDocs(profilesRef);
     const profilesDict: { [uid: string]: UserProfile } = {};
@@ -582,127 +604,86 @@ async function syncFromFirestore() {
       profilesDict[d.id] = d.data() as UserProfile;
     });
 
-    const activeUserDoc = await getDoc(doc(profilesRef, "activeUserProfile"));
-    const citizenDoc = await getDoc(doc(profilesRef, "citizenProfile"));
-    const orgDoc = await getDoc(doc(profilesRef, "orgProfile"));
+    const activeUserProfile = profilesDict["activeUserProfile"] || DEFAULT_USER;
+    const citizenProfile = profilesDict["citizenProfile"] || DEFAULT_USER;
+    const orgProfile = profilesDict["orgProfile"] || DEFAULT_ORG;
 
-    if (!issuesSnap.empty || !campaignsSnap.empty || !profilesSnap.empty) {
-      console.log("Found existing data in Firestore. Loading into local cache...");
-      const issuesList: Issue[] = [];
-      issuesSnap.forEach((d) => {
-        issuesList.push(d.data() as Issue);
-      });
-
-      // If we don't have Mumbai or Delhi issues in the loaded list, let's insert them to enrich the database!
-      const hasMumbaiOrDelhi = issuesList.some(i => i.id.startsWith("issue-mumbai-") || i.id.startsWith("issue-delhi-"));
-      if (!hasMumbaiOrDelhi) {
-        console.log("Enriching Firestore with Mumbai and Delhi seed issues...");
-        const extraIssues = INITIAL_ISSUES.filter(i => i.id.startsWith("issue-mumbai-") || i.id.startsWith("issue-delhi-"));
-        for (const iss of extraIssues) {
-          await setDoc(doc(firestore, "issues", iss.id), iss);
-          issuesList.push(iss);
-        }
-      }
-
-      issuesList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-      const campaignsList: Campaign[] = [];
-      campaignsSnap.forEach((d) => {
-        campaignsList.push(d.data() as Campaign);
-      });
-      campaignsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      // Ensure seed profiles are written to Firestore if missing
-      for (const p of SEED_PROFILES) {
-        if (!profilesDict[p.id]) {
-          console.log(`Sync Seeding missing profile to Firestore: ${p.name}`);
-          await setDoc(doc(firestore, "profiles", p.id), p);
-          profilesDict[p.id] = p;
-        }
-      }
-
-      const activeUserProfile = activeUserDoc.exists() ? (activeUserDoc.data() as UserProfile) : DEFAULT_USER;
-      const citizenProfile = citizenDoc.exists() ? (citizenDoc.data() as UserProfile) : DEFAULT_USER;
-      const orgProfile = orgDoc.exists() ? (orgDoc.data() as UserProfile) : DEFAULT_ORG;
-
-      const loadedDb: DbSchema = {
-        issues: issuesList,
-        campaigns: campaignsList,
-        activeUserProfile,
-        citizenProfile,
-        orgProfile,
-        profiles: profilesDict,
-      };
-
-      fs.writeFileSync(DATA_FILE, JSON.stringify(loadedDb, null, 2), "utf-8");
-      db = loadedDb;
-      console.log("Local cache synchronized with Firestore successfully!");
-    } else {
-      console.log("Firestore database is empty. Seeding initial data to Firestore...");
-      
-      const seedProfilesDict: { [uid: string]: UserProfile } = {};
-      for (const p of SEED_PROFILES) {
-        seedProfilesDict[p.id] = p;
-      }
-      seedProfilesDict["user-rahul-sharma"] = DEFAULT_USER;
-      seedProfilesDict["org-green-ward"] = DEFAULT_ORG;
-
-      const initialDb: DbSchema = {
-        issues: INITIAL_ISSUES,
-        campaigns: INITIAL_CAMPAIGNS,
-        activeUserProfile: DEFAULT_USER,
-        citizenProfile: DEFAULT_USER,
-        orgProfile: DEFAULT_ORG,
-        profiles: seedProfilesDict,
-      };
-      await syncToFirestore(initialDb);
-    }
+    return {
+      issues: issuesList,
+      campaigns: campaignsList,
+      activeUserProfile,
+      citizenProfile,
+      orgProfile,
+      profiles: profilesDict,
+    };
   } catch (err) {
-    console.error("Error during Firestore syncFromFirestore:", err);
+    console.error("Error getting database from Firestore:", err);
+    return {
+      issues: INITIAL_ISSUES,
+      campaigns: INITIAL_CAMPAIGNS,
+      activeUserProfile: DEFAULT_USER,
+      citizenProfile: DEFAULT_USER,
+      orgProfile: DEFAULT_ORG,
+      profiles: {},
+    };
   }
 }
 
-async function syncToFirestore(targetDb: DbSchema) {
+async function saveDb(targetDb: DbSchema) {
   try {
+    // Save/update issues in Firestore
     for (const issue of targetDb.issues) {
       await setDoc(doc(firestore, "issues", issue.id), issue);
     }
+    // Save/update campaigns in Firestore
     for (const campaign of targetDb.campaigns) {
       await setDoc(doc(firestore, "campaigns", campaign.id), campaign);
     }
+    // Save profiles in Firestore
     await setDoc(doc(firestore, "profiles", "activeUserProfile"), targetDb.activeUserProfile);
     await setDoc(doc(firestore, "profiles", "citizenProfile"), targetDb.citizenProfile);
     await setDoc(doc(firestore, "profiles", "orgProfile"), targetDb.orgProfile);
-    
-    // Also save all other cached user profiles
     if (targetDb.profiles) {
       for (const [uid, profile] of Object.entries(targetDb.profiles)) {
         await setDoc(doc(firestore, "profiles", uid), profile);
       }
     }
-    console.log("Firestore actual database updated successfully.");
   } catch (err) {
-    console.error("Error during Firestore syncToFirestore:", err);
+    console.error("Error saving database to Firestore:", err);
   }
 }
 
-function saveDatabase(targetDb: DbSchema) {
+async function bootstrapDatabase() {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(targetDb, null, 2), "utf-8");
-    // Sync with Firestore actual database in background
-    syncToFirestore(targetDb).catch(err => {
-      console.error("Background Firestore sync failed:", err);
-    });
+    console.log("Checking if Firestore database needs bootstrapping...");
+    const issuesRef = collection(firestore, "issues");
+    const issuesSnap = await getDocs(issuesRef);
+    
+    if (issuesSnap.empty) {
+      console.log("Firestore database is empty. Bootstrapping with seed data...");
+      for (const issue of INITIAL_ISSUES) {
+        await setDoc(doc(firestore, "issues", issue.id), issue);
+      }
+      for (const campaign of INITIAL_CAMPAIGNS) {
+        await setDoc(doc(firestore, "campaigns", campaign.id), campaign);
+      }
+      await setDoc(doc(firestore, "profiles", "activeUserProfile"), DEFAULT_USER);
+      await setDoc(doc(firestore, "profiles", "citizenProfile"), DEFAULT_USER);
+      await setDoc(doc(firestore, "profiles", "orgProfile"), DEFAULT_ORG);
+      for (const p of SEED_PROFILES) {
+        await setDoc(doc(firestore, "profiles", p.id), p);
+      }
+      console.log("Bootstrapped Firestore database successfully.");
+    } else {
+      console.log("Firestore database contains data. Skipping bootstrapping.");
+    }
   } catch (err) {
-    console.error("Error writing to database:", err);
+    console.error("Error bootstrapping database:", err);
   }
 }
 
-// Ensure database is bootstrapped
-let db = loadDatabase();
-
-// Sync from Firestore actual database
-syncFromFirestore();
+// Bootstrap Firestore database on startup
+bootstrapDatabase();
 
 // --------------------------------------------------------
 // Express Router API Endpoints
