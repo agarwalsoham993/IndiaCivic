@@ -1573,7 +1573,7 @@ export default function App() {
 
   if (!isMobile) {
     return (
-      <div className={`min-h-screen font-sans antialiased flex relative transition-colors duration-500 ${theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'} theme-transition`}>
+      <div data-theme={theme} className={`h-screen font-sans antialiased flex relative transition-colors duration-500 ${theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'} theme-transition`}>
         {/* Left Desktop Sidebar - Collapsed & Pastel Green */}
         <div className="w-16 sm:w-20 bg-[#e6f4ea] dark:bg-[#0f172a] text-emerald-950 dark:text-slate-100 flex flex-col border-r border-[#cbe2d3] dark:border-slate-800/80 fixed h-full top-0 left-0 z-[60] select-none">
           {/* Brand Header */}
@@ -1700,7 +1700,7 @@ export default function App() {
         </div>
 
         {/* Desktop Content Frame */}
-        <div className="flex-1 flex flex-col min-h-screen pl-16 sm:pl-20 max-w-full overflow-hidden bg-slate-50 dark:bg-[#0b0f19]">
+        <div className="flex-1 flex flex-col h-screen pl-16 sm:pl-20 max-w-full overflow-hidden bg-slate-50 dark:bg-[#0b0f19]">
           {/* Desktop Header - Hidden for MapsView to allow 100% full screen expansion */}
           {activeTab !== "maps" && (
             <header className={`h-16 px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs border-b transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80' : 'bg-white border-slate-200'}`}>
@@ -2244,7 +2244,7 @@ export default function App() {
   }
 
   return (
-    <div className={`w-full h-[100dvh] font-sans antialiased relative flex flex-col overflow-hidden transition-colors duration-500 ${theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'} theme-transition`}>
+    <div data-theme={theme} className={`w-full h-[100dvh] font-sans antialiased relative flex flex-col overflow-hidden transition-colors duration-500 ${theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'} theme-transition`}>
         {/* Inner header brand bar */}
         <div className={`h-14 px-5 flex items-center justify-between z-10 border-b transition-colors duration-500 ${theme === 'dark' ? 'bg-[#0f172a] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
           <div className="flex items-center space-x-1.5">
@@ -2297,7 +2297,7 @@ export default function App() {
         </div>
 
         {/* Scrollable Viewport Stage */}
-        <div className={`flex-1 ${activeTab === "maps" ? "overflow-hidden p-0 bg-slate-950" : "overflow-y-auto px-4 py-4 bg-slate-50"} scrollbar-none relative`}>
+        <div className={`flex-1 ${activeTab === "maps" ? "overflow-hidden p-0 bg-slate-950" : `overflow-y-auto px-4 py-4 ${theme === 'dark' ? 'bg-[#0b0f19] text-slate-100' : 'bg-slate-50 text-slate-800'}`} scrollbar-none relative`}>
           
           <AnimatePresence mode="wait">
             {selectedIssue ? (

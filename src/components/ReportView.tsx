@@ -686,10 +686,7 @@ export default function ReportView({ onAddIssue, isMobile = false }: ReportViewP
                       <span>Open Camera</span>
                     </button>
 
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 rounded-full text-emerald-700 dark:text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>Certified Safe Geotag Verification Enabled</span>
-                    </div>
+
                   </div>
                 )}
               </div>
