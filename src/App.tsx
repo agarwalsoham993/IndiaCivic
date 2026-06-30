@@ -38,15 +38,17 @@ import {
   Moon
 } from "lucide-react";
 
-import { Issue, Campaign, UserProfile, Donation, Comment } from "./types";
+import { Issue, Campaign, UserProfile, Donation, Comment, Notification } from "./types";
 import HomeView from "./components/HomeView";
 import MapsView from "./components/MapsView";
 import ReportView from "./components/ReportView";
 import CampaignsView from "./components/CampaignsView";
 import ProfileView from "./components/ProfileView";
+import NotificationDrawer from "./components/NotificationDrawer";
 
 // Firebase Auth & Config
-import { auth } from "./lib/firebase";
+import { auth, db as firestoreDb } from "./lib/firebase";
+import { collection, doc, onSnapshot, query, orderBy, limit, writeBatch } from "firebase/firestore";
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
@@ -123,6 +125,9 @@ export default function App() {
   const [citizenProfile, setCitizenProfile] = useState<UserProfile | null>(null);
   const [orgProfile, setOrgProfile] = useState<UserProfile | null>(null);
   const [leaderboardUsers, setLeaderboardUsers] = useState<UserProfile[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifDrawer, setShowNotifDrawer] = useState(false);
   
   // Stripe Payment Gateway status states
   const [paymentStatus, setPaymentStatus] = useState<{
@@ -235,7 +240,7 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setSuccessMsg(`🎉 Success! We matched your WhatsApp number ${phone} and linked ${data.mergedIssuesCount} previous reports. You earned +${data.pointsAwarded} civic points!`);
-        loadAllData();
+        fetchLeaderboard();
       } else {
         setErrorMsg(data.error || "Failed to merge WhatsApp reports.");
       }
@@ -443,47 +448,99 @@ export default function App() {
     }
   }, [isGuest, activeTab]);
 
-  const loadAllData = async () => {
-    try {
-      // Fetch issues
-      const resIssues = await fetch("/api/issues");
-      const dataIssues = await resIssues.json();
-      setIssues(dataIssues);
+  // Real-time Firestore Listeners
+  useEffect(() => {
+    // ── Live Issues Feed ─────────────────────────────────────────────────────
+    const issuesQuery = query(
+      collection(firestoreDb, "issues"),
+      orderBy("timestamp", "desc")
+    );
+    const unsubIssues = onSnapshot(issuesQuery, (snap) => {
+      const loadedIssues = snap.docs.map(d => ({ id: d.id, ...d.data() } as Issue));
+      setIssues(loadedIssues);
+    }, (err) => console.error("Issues listener error:", err));
 
-      // Fetch campaigns
-      const resCamps = await fetch("/api/campaigns");
-      const dataCamps = await resCamps.json();
-      setCampaigns(dataCamps);
+    // ── Live Campaigns Feed ──────────────────────────────────────────────────
+    const unsubCampaigns = onSnapshot(
+      collection(firestoreDb, "campaigns"),
+      (snap) => {
+        const loadedCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as Campaign));
+        setCampaigns(loadedCampaigns);
+      },
+      (err) => console.error("Campaigns listener error:", err)
+    );
 
-      // Fetch profiles
-      const resProfile = await fetch("/api/profile");
-      const dataProfile = await resProfile.json();
-      const activeUser = dataProfile.activeUser;
-      
-      setUserProfile(activeUser);
-      setCitizenProfile(dataProfile.citizen);
-      setOrgProfile(dataProfile.org);
+    let unsubProfile: (() => void) | null = null;
+    let unsubNotifs: (() => void) | null = null;
 
-      if (activeUser) {
-        if (activeUser.location) {
-          setUserLocationName(activeUser.location);
-        }
-        if (activeUser.wardName) {
-          setUserWardName(activeUser.wardName);
-        }
-        if (activeUser.latitude && activeUser.longitude) {
-          setUserCoords({ lat: activeUser.latitude, lng: activeUser.longitude });
-        }
+    const uId = userProfile?.id;
+    if (uId && uId !== "guest") {
+      // ── Live User Profile ────────────────────────────────────────────────────
+      unsubProfile = onSnapshot(
+        doc(firestoreDb, "profiles", uId),
+        (snap) => {
+          if (snap.exists()) {
+            const updatedProfile = { id: snap.id, ...snap.data() } as UserProfile;
+            setUserProfile(updatedProfile);
+            if (updatedProfile.role === "CITIZEN") {
+              setCitizenProfile(updatedProfile);
+            } else {
+              setOrgProfile(updatedProfile);
+            }
+          }
+        },
+        (err) => console.error("Profile listener error:", err)
+      );
+
+      // ── Live Notifications ───────────────────────────────────────────────────
+      const notifQuery = query(
+        collection(firestoreDb, "notifications", uId, "items"),
+        orderBy("timestamp", "desc")
+      );
+      unsubNotifs = onSnapshot(notifQuery, (snap) => {
+        const loadedNotifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        setNotifications(loadedNotifs);
+        setUnreadCount(loadedNotifs.filter(n => !n.read).length);
+      }, (err) => console.error("Notifications listener error:", err));
+    }
+
+    return () => {
+      unsubIssues();
+      unsubCampaigns();
+      if (unsubProfile) unsubProfile();
+      if (unsubNotifs) unsubNotifs();
+    };
+  }, [userProfile?.id]);
+
+  // Synchronize location coordinates and names when userProfile updates
+  useEffect(() => {
+    if (userProfile && userProfile.id !== "guest") {
+      if (userProfile.location) {
+        setUserLocationName(userProfile.location);
       }
+      if (userProfile.wardName) {
+        setUserWardName(userProfile.wardName);
+      }
+      if (userProfile.latitude && userProfile.longitude) {
+        setUserCoords({ lat: userProfile.latitude, lng: userProfile.longitude });
+      }
+    }
+  }, [userProfile]);
 
-      // Fetch leaderboard users
+  // Load leaderboard users
+  const fetchLeaderboard = async () => {
+    try {
       const resLeaderboard = await fetch("/api/leaderboard");
       const dataLeaderboard = await resLeaderboard.json();
       setLeaderboardUsers(dataLeaderboard);
     } catch (err) {
-      console.error("Error loading server data:", err);
+      console.error("Error loading leaderboard:", err);
     }
   };
+
+  useEffect(() => {
+    fetchLeaderboard();
+  }, [userProfile?.id, userProfile?.totalPoints]);
 
   // Sync Firebase authentication with our Express + Firestore actual database
   useEffect(() => {
@@ -522,14 +579,14 @@ export default function App() {
           console.error("Error signing out backend session:", err);
         }
       }
-      loadAllData();
+      fetchLeaderboard();
     });
 
     return () => unsubscribe();
   }, [signUpRole]);
 
   useEffect(() => {
-    loadAllData();
+    fetchLeaderboard();
   }, [activeTab]);
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -599,10 +656,47 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setUserProfile(data.activeUser);
-        loadAllData();
+        fetchLeaderboard();
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (!userProfile || userProfile.id === "guest") return;
+    try {
+      const batch = writeBatch(firestoreDb);
+      notifications
+        .filter(n => !n.read)
+        .forEach(n => {
+          batch.update(doc(firestoreDb, "notifications", userProfile.id, "items", n.id), { read: true });
+        });
+      await batch.commit();
+    } catch (err) {
+      console.error("Error marking all notifications as read:", err);
+    }
+  };
+
+  const handleNavigateNotification = async (notif: Notification) => {
+    // Mark individual notification as read if unread
+    if (!notif.read && userProfile && userProfile.id !== "guest") {
+      try {
+        const { updateDoc } = await import("firebase/firestore");
+        await updateDoc(doc(firestoreDb, "notifications", userProfile.id, "items", notif.id), { read: true });
+      } catch (err) {
+        console.error("Error marking single notification read:", err);
+      }
+    }
+
+    if (notif.issueId) {
+      const foundIssue = issues.find(i => i.id === notif.issueId);
+      if (foundIssue) {
+        setSelectedIssue(foundIssue);
+        setActiveTab("home");
+      }
+    } else if (notif.campaignId) {
+      setActiveTab("campaigns");
     }
   };
 
@@ -642,7 +736,7 @@ export default function App() {
           setSelectedIssue(data.issue);
         }
         setShowUpvoteProofModal(false);
-        loadAllData();
+        fetchLeaderboard();
       } else {
         alert(data.error || "Failed to submit vote.");
       }
@@ -688,7 +782,7 @@ export default function App() {
             setResolutionPhoto(null);
             setResolutionDesc("");
             setIsResolving(false);
-            loadAllData();
+            fetchLeaderboard();
           } else {
             setResolutionError(data.error || "Failed to resolve issue.");
           }
@@ -722,7 +816,7 @@ export default function App() {
             setResolutionPhoto(null);
             setResolutionDesc("");
             setIsResolving(false);
-            loadAllData();
+            fetchLeaderboard();
           } else {
             setResolutionError(data.error || "Failed to resolve issue.");
           }
@@ -763,7 +857,7 @@ export default function App() {
         }
         setSelectedIssue(data.issue);
         setIssues(prev => prev.map(iss => iss.id === issueId ? data.issue : iss));
-        loadAllData();
+        fetchLeaderboard();
       }
     } catch (err) {
       console.error(err);
@@ -786,7 +880,7 @@ export default function App() {
       if (data.success) {
         setSelectedIssue(data.issue);
         setIssues(prev => prev.map(iss => iss.id === issueId ? data.issue : iss));
-        loadAllData();
+        fetchLeaderboard();
       }
     } catch (err) {
       console.error(err);
@@ -820,7 +914,7 @@ export default function App() {
       return null;
     }
     
-    loadAllData();
+    fetchLeaderboard();
     return data.receipt;
   };
 
@@ -843,7 +937,7 @@ export default function App() {
     if (!response.ok) {
       throw new Error(data.error || "Failed to process verification step");
     }
-    loadAllData();
+    fetchLeaderboard();
     return data.campaign;
   };
 
@@ -855,7 +949,7 @@ export default function App() {
     if (!response.ok) {
       throw new Error(data.error || "Refund simulation failed");
     }
-    loadAllData();
+    fetchLeaderboard();
     return data;
   };
 
@@ -1245,6 +1339,18 @@ export default function App() {
                 )}
               </motion.div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Live Notification Drawer Overlay */}
+        <AnimatePresence>
+          {showNotifDrawer && (
+            <NotificationDrawer
+              notifications={notifications}
+              onClose={() => setShowNotifDrawer(false)}
+              onMarkAllRead={handleMarkAllRead}
+              onNavigate={handleNavigateNotification}
+            />
           )}
         </AnimatePresence>
       </>
@@ -1861,6 +1967,8 @@ export default function App() {
                         currentWardName={userWardName}
                         isLocationLoading={isLocationLoading}
                         onDetectLocation={detectLocation}
+                        unreadCount={unreadCount}
+                        onOpenNotifications={() => setShowNotifDrawer(true)}
                       />
                     )}
                     {activeTab === "maps" && (
@@ -1869,7 +1977,7 @@ export default function App() {
                         isMobile={false} 
                         onSelectIssue={setSelectedIssue}
                         userProfile={userProfile}
-                        onRefreshData={loadAllData}
+                        onRefreshData={fetchLeaderboard}
                         setAuthMode={setAuthMode}
                         setShowAuthModal={setShowAuthModal}
                         theme={theme}
@@ -1883,7 +1991,7 @@ export default function App() {
                       <ReportView 
                         isMobile={false}
                         onAddIssue={() => {
-                          loadAllData();
+                          fetchLeaderboard();
                           setActiveTab(isGuest ? "maps" : "home");
                         }}
                       />
@@ -1895,7 +2003,7 @@ export default function App() {
                         onDonate={handleDonateEscrow}
                         onVerifyStep={handleVerifyStep}
                         onSimulate90Days={handleSimulate90Days}
-                        onRefresh={loadAllData}
+                        onRefresh={fetchLeaderboard}
                       />
                     )}
                     {activeTab === "profile" && (
@@ -1905,7 +2013,7 @@ export default function App() {
                         org={orgProfile || DEFAULT_ORG}
                         onToggleRole={handleToggleRole}
                         leaderboardUsers={leaderboardUsers}
-                        onRefreshProfile={loadAllData}
+                        onRefreshProfile={fetchLeaderboard}
                         onDetectLocation={detectLocation}
                         isLocationLoading={isLocationLoading}
                       />
@@ -2430,6 +2538,8 @@ export default function App() {
                     currentWardName={userWardName}
                     isLocationLoading={isLocationLoading}
                     onDetectLocation={detectLocation}
+                    unreadCount={unreadCount}
+                    onOpenNotifications={() => setShowNotifDrawer(true)}
                   />
                 )}
                 {activeTab === "maps" && (
@@ -2438,7 +2548,7 @@ export default function App() {
                     isMobile={isMobile} 
                     onSelectIssue={setSelectedIssue}
                     userProfile={userProfile}
-                    onRefreshData={loadAllData}
+                    onRefreshData={fetchLeaderboard}
                     setAuthMode={setAuthMode}
                     setShowAuthModal={setShowAuthModal}
                     theme={theme}
@@ -2452,7 +2562,7 @@ export default function App() {
                   <ReportView 
                     isMobile={true}
                     onAddIssue={() => {
-                      loadAllData();
+                      fetchLeaderboard();
                       setActiveTab(isGuest ? "maps" : "home");
                     }} 
                   />
@@ -2464,7 +2574,7 @@ export default function App() {
                     onDonate={handleDonateEscrow}
                     onVerifyStep={handleVerifyStep}
                     onSimulate90Days={handleSimulate90Days}
-                    onRefresh={loadAllData}
+                    onRefresh={fetchLeaderboard}
                   />
                 )}
                 {activeTab === "profile" && (
@@ -2474,7 +2584,7 @@ export default function App() {
                     org={orgProfile || DEFAULT_ORG}
                     onToggleRole={handleToggleRole}
                     leaderboardUsers={leaderboardUsers}
-                    onRefreshProfile={loadAllData}
+                    onRefreshProfile={fetchLeaderboard}
                     onDetectLocation={detectLocation}
                     isLocationLoading={isLocationLoading}
                   />

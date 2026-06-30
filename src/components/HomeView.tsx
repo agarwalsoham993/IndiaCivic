@@ -36,6 +36,8 @@ interface HomeViewProps {
   currentWardName?: string;
   isLocationLoading?: boolean;
   onDetectLocation?: () => void;
+  unreadCount: number;
+  onOpenNotifications: () => void;
 }
 
 export default function HomeView({ 
@@ -48,7 +50,9 @@ export default function HomeView({
   currentLocationName,
   currentWardName,
   isLocationLoading,
-  onDetectLocation
+  onDetectLocation,
+  unreadCount,
+  onOpenNotifications
 }: HomeViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -115,9 +119,16 @@ export default function HomeView({
           </span>
           
           {/* Notifications */}
-          <button className="relative p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer bg-transparent shrink-0">
+          <button 
+            onClick={onOpenNotifications}
+            className="relative p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer bg-transparent shrink-0"
+          >
             <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-rose-500 ring-1 ring-white" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
           
           {/* Points Bubble styled exactly like Screenshot 2 with large score and smaller XP label */}

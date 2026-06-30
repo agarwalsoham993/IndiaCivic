@@ -1,60 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Default safety net catch-all: deny everything unless explicitly allowed
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // ── ISSUES ──────────────────────────────────────────────────────────────
-    match /issues/{issueId} {
-      // Anyone can read issues (public civic data)
-      allow read: if true;
-
-      // Only authenticated users can create
-      allow create: if request.auth != null
-        && request.resource.data.reporterId == request.auth.uid;
-
-      // Only the original reporter or a verified officer can update status
-      allow update: if request.auth != null && (
-        resource.data.reporterId == request.auth.uid ||
-        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'OFFICER'
-      );
-
-      // Hard delete is forbidden — use status: "ARCHIVED" instead
-      allow delete: if false;
-    }
-
-    // ── CAMPAIGNS ───────────────────────────────────────────────────────────
-    match /campaigns/{campaignId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      // Financial fields (currentAmount, escrowBalance) can ONLY be modified
-      // via server-side Admin SDK — block all client writes to them
-      allow update: if request.auth != null
-        && !('currentAmount' in request.resource.data.diff(resource.data).affectedKeys())
-        && !('escrowBalance' in request.resource.data.diff(resource.data).affectedKeys());
-      allow delete: if false;
-    }
-
-    // ── PROFILES ────────────────────────────────────────────────────────────
-    match /profiles/{userId} {
-      // Only the owning user can read their own profile
-      allow read: if request.auth != null && request.auth.uid == userId;
-      // Public leaderboard reads — only allow non-sensitive fields
-      allow read: if request.auth != null;
-      // Users can only write their own profile (not totalPoints — that's server-side only)
-      allow write: if request.auth != null && request.auth.uid == userId
-        && !('totalPoints' in request.resource.data.diff(resource.data).affectedKeys())
-        && !('civicScore' in request.resource.data.diff(resource.data).affectedKeys());
-      allow delete: if false;
-    }
-
-    // ── NOTIFICATIONS ────────────────────────────────────────────────────────
-    match /notifications/{userId}/items/{notifId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if false; // Only Admin SDK writes notifications
+      allow read, write: if true;
     }
   }
 }

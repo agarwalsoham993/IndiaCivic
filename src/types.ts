@@ -125,3 +125,15 @@ export interface UserProfile {
     expiresAt: string;
   };
 }
+
+export interface Notification {
+  id: string;
+  type: "STATUS_CHANGE" | "VOTE_MILESTONE" | "CAMPAIGN_UPDATE" | "RESOLUTION";
+  title: string;
+  body: string;
+  read: boolean;
+  timestamp: string;
+  issueId?: string;
+  campaignId?: string;
+}
+
