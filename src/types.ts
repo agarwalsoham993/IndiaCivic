@@ -115,4 +115,7 @@ export interface UserProfile {
   adoptedWards?: string[];
   carbonCredits?: number;
   availableFunds: number; // Reinvestable wallet for refunds
+  wardName?: string;
+  latitude?: number;
+  longitude?: number;
 }

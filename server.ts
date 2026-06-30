@@ -76,6 +76,8 @@ const DEFAULT_USER: UserProfile = {
   badges: ["First Responder", "Verified Eye", "Streak Champion", "Safety Auditor", "Top Donor"],
   streakDays: 14,
   availableFunds: 2500, // Pre-seeded reinvestable wallet balance (e.g. from a past refunded campaign or manual top-up)
+  latitude: 12.9719,
+  longitude: 77.6412,
 };
 
 const DEFAULT_ORG: UserProfile = {
@@ -100,6 +102,8 @@ const DEFAULT_ORG: UserProfile = {
   adoptedWards: ["Ward 42, North Zone", "Ward 18, Central", "Ward 05, East Zone"],
   carbonCredits: 12450,
   availableFunds: 15000,
+  latitude: 13.0300,
+  longitude: 77.5600,
 };
 
 const INITIAL_ISSUES: Issue[] = [
@@ -1820,12 +1824,21 @@ app.post("/api/profile/location", async (req, res) => {
   // Update in local memory db
   if (db.activeUserProfile) {
     db.activeUserProfile.location = location;
+    db.activeUserProfile.wardName = wardName || "Ward 88";
+    db.activeUserProfile.latitude = lat || 12.9719;
+    db.activeUserProfile.longitude = lng || 77.6412;
   }
   if (db.citizenProfile) {
     db.citizenProfile.location = location;
+    db.citizenProfile.wardName = wardName || "Ward 88";
+    db.citizenProfile.latitude = lat || 12.9719;
+    db.citizenProfile.longitude = lng || 77.6412;
   }
   if (db.orgProfile) {
     db.orgProfile.location = location;
+    db.orgProfile.wardName = wardName || "Ward 88";
+    db.orgProfile.latitude = lat || 12.9719;
+    db.orgProfile.longitude = lng || 77.6412;
   }
   
   // If user is authenticated, sync with Firestore under profiles
@@ -1833,10 +1846,18 @@ app.post("/api/profile/location", async (req, res) => {
   if (uid && uid !== "guest") {
     if (db.profiles && db.profiles[uid]) {
       db.profiles[uid].location = location;
+      db.profiles[uid].wardName = wardName || "Ward 88";
+      db.profiles[uid].latitude = lat || 12.9719;
+      db.profiles[uid].longitude = lng || 77.6412;
     }
     try {
       const profileRef = doc(firestore, "profiles", uid);
-      await setDoc(profileRef, { location: location }, { merge: true });
+      await setDoc(profileRef, { 
+        location: location,
+        wardName: wardName || "Ward 88",
+        latitude: lat || 12.9719,
+        longitude: lng || 77.6412
+      }, { merge: true });
     } catch (err) {
       console.error("Firestore update profile location failed:", err);
     }
@@ -1962,6 +1983,9 @@ app.post("/api/profile/login", async (req, res) => {
         badges: ["New Citizen"],
         streakDays: 1,
         availableFunds: 5000, // Seeding wallet for testing out features
+        wardName: "Ward 88",
+        latitude: 12.9719,
+        longitude: 77.6412,
       };
       await setDoc(profileRef, userProfile);
     }

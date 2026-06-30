@@ -229,50 +229,50 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
           <motion.div 
             layoutId={`camp-card-${selectedCampaign.id}`}
-            className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4 shadow-sm"
+            className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm"
           >
             <div className="flex justify-between items-start">
               <div>
                 <span className={`px-2 py-0.5 text-[9px] font-bold rounded border uppercase ${
                   selectedCampaign.status === "RESOLVED" 
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    ? "bg-emerald-50 dark:bg-emerald-950/45 border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300"
                     : selectedCampaign.status === "REFUNDED"
-                    ? "bg-rose-50 border-rose-200 text-rose-700"
-                    : "bg-indigo-50 border-indigo-200 text-indigo-700"
+                    ? "bg-rose-50 dark:bg-rose-950/45 border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300"
+                    : "bg-indigo-50 dark:bg-indigo-950/45 border-indigo-200 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300"
                 }`}>
                   {selectedCampaign.status} Campaign
                 </span>
-                <h3 className="text-lg font-extrabold text-slate-800 mt-2">{selectedCampaign.title}</h3>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">ESCROW ID: #{selectedCampaign.id}</p>
+                <h3 className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-2">{selectedCampaign.title}</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-mono mt-0.5">ESCROW ID: #{selectedCampaign.id}</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed font-medium">{selectedCampaign.description}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">{selectedCampaign.description}</p>
 
             {/* Escrow wallet tracking progress */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5 shadow-sm">
+            <div className="bg-slate-50 dark:bg-slate-850/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3.5 shadow-sm">
               <div className="flex justify-between text-xs">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">ESCROW WALLET FUNDS LOCK</span>
-                  <span className="text-lg font-extrabold text-slate-800">₹{selectedCampaign.currentAmount.toLocaleString()}</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">ESCROW WALLET FUNDS LOCK</span>
+                  <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100">₹{selectedCampaign.currentAmount.toLocaleString()}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">TARGET BUDGET</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block">TARGET BUDGET</span>
                   <span className="text-lg font-extrabold text-indigo-600">₹{selectedCampaign.targetAmount.toLocaleString()}</span>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full" 
                   style={{ width: `${Math.min(100, (selectedCampaign.currentAmount / selectedCampaign.targetAmount) * 100)}%` }}
                 />
               </div>
 
-              <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase">
+              <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
                 <span>{Math.floor((selectedCampaign.currentAmount / selectedCampaign.targetAmount) * 100)}% Funded</span>
-                <span className="flex items-center text-amber-700">
+                <span className="flex items-center text-amber-700 dark:text-amber-500">
                   <Clock className="h-3 w-3 mr-1" /> {selectedCampaign.daysLeft} Days Until Auto-Refund
                 </span>
               </div>
@@ -280,21 +280,21 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
             {/* 3-Step Milestone release verification dashboard */}
             <div className="space-y-3">
-              <h4 className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider flex items-center">
-                <Sparkles className="h-3.5 w-3.5 text-indigo-600 mr-1" />
+              <h4 className="text-xs font-extrabold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center">
+                <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 mr-1" />
                 3-Step Release Verification
               </h4>
               
               <div className="grid grid-cols-3 gap-2">
                 <div className={`p-3 rounded-xl text-center border text-[10px] ${
-                  selectedCampaign.verificationStep >= 1 ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold" : "bg-slate-100 border-slate-200 text-slate-400"
+                  selectedCampaign.verificationStep >= 1 ? "bg-emerald-50 dark:bg-emerald-950/45 border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 font-semibold" : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500"
                 }`}>
                   <div className="font-extrabold uppercase">1. Fund Lock</div>
                   <div className="mt-1 font-semibold">{selectedCampaign.currentAmount >= selectedCampaign.targetAmount ? "VERIFIED ✓" : "COLLECTING"}</div>
                 </div>
 
                 <div className={`p-3 rounded-xl text-center border text-[10px] ${
-                  selectedCampaign.verificationStep >= 2 ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold" : "bg-slate-100 border-slate-200 text-slate-400"
+                  selectedCampaign.verificationStep >= 2 ? "bg-emerald-50 dark:bg-emerald-950/45 border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 font-semibold" : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500"
                 }`}>
                   <div className="font-extrabold uppercase">2. Proof Upload</div>
                   <div className="mt-1 font-semibold">
@@ -303,7 +303,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                 </div>
 
                 <div className={`p-3 rounded-xl text-center border text-[10px] ${
-                  selectedCampaign.verificationStep >= 3 ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold" : "bg-slate-100 border-slate-200 text-slate-400"
+                  selectedCampaign.verificationStep >= 3 ? "bg-emerald-50 dark:bg-emerald-950/45 border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 font-semibold" : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500"
                 }`}>
                   <div className="font-extrabold uppercase">3. Public Vote</div>
                   <div className="mt-1 font-semibold">
@@ -314,9 +314,9 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
               {/* Action Panels depending on active verification step */}
               {selectedCampaign.verificationStep === 2 && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
-                  <h5 className="text-[11px] font-bold text-slate-800 uppercase">Resolver: Submit Completion Proof</h5>
-                  <p className="text-[10px] text-slate-500">Upload before/after photo + video walk-proof of completed potholes/lighting road repairs to unlock neighbor voting.</p>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                  <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase">Resolver: Submit Completion Proof</h5>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Upload before/after photo + video walk-proof of completed potholes/lighting road repairs to unlock neighbor voting.</p>
                   <button
                     onClick={() => handleVerifyAction(selectedCampaign.id, 2)}
                     className="py-1.5 px-3 bg-indigo-600 text-white hover:bg-indigo-700 font-bold rounded-lg text-[10px] uppercase cursor-pointer shadow-sm"
@@ -327,16 +327,16 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
               )}
 
               {selectedCampaign.verificationStep === 3 && selectedCampaign.status !== "RESOLVED" && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                  <h5 className="text-[11px] font-bold text-slate-800 uppercase flex items-center">
-                    <PlayCircle className="h-4 w-4 text-indigo-600 mr-1.5" />
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase flex items-center">
+                    <PlayCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mr-1.5" />
                     Public Verification Voting Active
                   </h5>
-                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
                     Contractor uploaded video proof of MG Road junction asphalt patching. Neighbors, did this resolve the problem? Vote below to release escrow budget.
                   </p>
 
-                  <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200 text-[10px] font-mono text-indigo-700 font-semibold shadow-sm">
+                  <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px] font-mono text-indigo-700 dark:text-indigo-400 font-semibold shadow-sm">
                     <span>YES, FIXED: {selectedCampaign.votesAgree} votes</span>
                     <span>NO, STILL BROKEN: {selectedCampaign.votesDisagree} votes</span>
                   </div>
@@ -362,8 +362,8 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
             {/* Donation crowdfunding card input */}
             {selectedCampaign.status === "FUNDRAISING" && (
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center">
+              <div className="bg-slate-50 dark:bg-slate-850/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider flex items-center">
                   <Heart className="h-3.5 w-3.5 text-rose-500 mr-1.5" /> Contribute Crowdfund Escrow
                 </h4>
 
@@ -376,7 +376,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                       className={`py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
                         donationAmount === amount 
                           ? "bg-indigo-600 border-indigo-500 text-white shadow-sm" 
-                          : "bg-white border-slate-200 text-slate-600 hover:text-slate-800"
+                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                       }`}
                     >
                       ₹{amount}
@@ -390,14 +390,14 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                   value={donationAmount}
                   onChange={(e) => setDonationAmount(Number(e.target.value))}
                   placeholder="Custom contribution (₹)..."
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
                 />
 
                 {/* In-app wallet options */}
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-slate-200 shadow-sm">
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase">Pay with Refund Wallet:</span>
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Pay with Refund Wallet:</span>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-emerald-600">₹{user.availableFunds} available</span>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">₹{user.availableFunds} available</span>
                     <input 
                       type="checkbox" 
                       checked={useWallet}
@@ -409,11 +409,11 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
                 {/* Payment channel toggles */}
                 {!useWallet && (
-                  <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600 uppercase">
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">
                     <button
                       onClick={() => setPaymentMethod("upi")}
                       className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
-                        paymentMethod === "upi" ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-400"
+                        paymentMethod === "upi" ? "bg-indigo-50 dark:bg-indigo-950/45 border-indigo-200 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
                       }`}
                     >
                       Unified UPI (Paytm/GPay)
@@ -421,7 +421,7 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                     <button
                       onClick={() => setPaymentMethod("card")}
                       className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
-                        paymentMethod === "card" ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-400"
+                        paymentMethod === "card" ? "bg-indigo-50 dark:bg-indigo-950/45 border-indigo-200 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
                       }`}
                     >
                       Credit/Debit Card
@@ -430,14 +430,14 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                 )}
 
                 {errorMsg && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-[10px] font-semibold flex items-center space-x-1 shadow-sm">
+                  <div className="p-2.5 bg-rose-50 dark:bg-rose-950/45 border border-rose-200 dark:border-rose-800/80 rounded-lg text-rose-700 dark:text-rose-300 text-[10px] font-semibold flex items-center space-x-1 shadow-sm">
                     <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                     <span>{errorMsg}</span>
                   </div>
                 )}
 
                 {successMsg && (
-                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-[10px] font-semibold flex items-center space-x-1 shadow-sm">
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/45 border border-emerald-200 dark:border-emerald-800/80 rounded-lg text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold flex items-center space-x-1 shadow-sm">
                     <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
                     <span>{successMsg}</span>
                   </div>
@@ -455,14 +455,14 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
             {/* Simulated 90-days Auto-Refund option */}
             {selectedCampaign.status !== "RESOLVED" && selectedCampaign.status !== "REFUNDED" && (
-              <div className="pt-2 p-3.5 rounded-xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-between">
+              <div className="pt-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <div>
-                  <h5 className="text-[11px] font-bold text-slate-800 uppercase">Simulate 90 Days Elapsing</h5>
-                  <p className="text-[9px] text-slate-500 font-semibold">Triggers auto-return of idle escrow funds directly to donor wallets.</p>
+                  <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase">Simulate 90 Days Elapsing</h5>
+                  <p className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold">Triggers auto-return of idle escrow funds directly to donor wallets.</p>
                 </div>
                 <button
                   onClick={() => handleSimulateRefund(selectedCampaign.id)}
-                  className="px-2.5 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition-all rounded-lg text-[10px] font-extrabold uppercase flex items-center space-x-1 cursor-pointer shadow-sm"
+                  className="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/45 border border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-all rounded-lg text-[10px] font-extrabold uppercase flex items-center space-x-1 cursor-pointer shadow-sm"
                 >
                   <RotateCcw className="h-3.5 w-3.5 animate-spin-slow" />
                   <span>Elapse & Refund</span>
@@ -472,31 +472,31 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
 
             {/* Donation Activity Log with receipts */}
             <div className="space-y-3">
-              <h4 className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider flex items-center">
-                <Receipt className="h-3.5 w-3.5 text-indigo-600 mr-1.5" /> Backer Donations & GST Receipts
+              <h4 className="text-xs font-extrabold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center">
+                <Receipt className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 mr-1.5" /> Backer Donations & GST Receipts
               </h4>
 
               {selectedCampaign.donations.length === 0 ? (
-                <p className="text-[10px] text-slate-400 uppercase text-center py-2">No donations yet. Be the first backer!</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase text-center py-2">No donations yet. Be the first backer!</p>
               ) : (
                 <div className="space-y-2">
                   {selectedCampaign.donations.map((donation) => (
                     <div 
                       key={donation.id}
-                      className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 shadow-sm animate-fade-in"
+                      className="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 shadow-sm animate-fade-in"
                     >
                       <div className="flex items-center space-x-2">
-                        <User className="h-3.5 w-3.5 text-indigo-600" />
+                        <User className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                         <div>
                           <span className="font-bold">{donation.donorName}</span>
-                          <span className="text-[9px] text-slate-400 font-mono block">Receipt: {donation.receiptNumber}</span>
+                          <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono block">Receipt: {donation.receiptNumber}</span>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="font-extrabold text-emerald-600">+ ₹{donation.amount.toLocaleString()}</span>
                         <button
                           onClick={() => setSelectedReceipt(donation)}
-                          className="p-1 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer"
+                          className="p-1 rounded bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-100 dark:border-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all cursor-pointer"
                           title="View GST Receipt"
                         >
                           <Receipt className="h-3.5 w-3.5" />
@@ -546,45 +546,45 @@ export default function CampaignsView({ user, campaigns, onDonate, onVerifyStep,
                 key={camp.id}
                 layoutId={`camp-card-${camp.id}`}
                 onClick={() => setSelectedCampaign(camp)}
-                className="group p-5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all duration-300 cursor-pointer relative shadow-sm hover:shadow-md text-left"
+                className="group p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-850/60 transition-all duration-300 cursor-pointer relative shadow-sm hover:shadow-md text-left"
               >
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                   <span>ESCROW ID: #{camp.id}</span>
-                  <span className="font-bold flex items-center text-amber-700">
+                  <span className="font-bold flex items-center text-amber-700 dark:text-amber-500">
                     <Clock className="h-3 w-3 mr-1" /> {camp.daysLeft} Days left
                   </span>
                 </div>
 
-                <h3 className="text-base font-extrabold text-slate-800 mt-2 group-hover:text-indigo-600 transition-colors">
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 mt-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                   {camp.title}
                 </h3>
-                <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed font-medium">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-2 leading-relaxed font-medium">
                   {camp.description}
                 </p>
 
                 {/* Progress indicators bar */}
                 <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-xs font-bold text-slate-700">
+                  <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
                     <span>₹{camp.currentAmount.toLocaleString()} locked</span>
-                    <span className="text-slate-400">Goal: ₹{camp.targetAmount.toLocaleString()}</span>
+                    <span className="text-slate-400 dark:text-slate-500">Goal: ₹{camp.targetAmount.toLocaleString()}</span>
                   </div>
                   
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full" 
                       style={{ width: `${Math.min(100, (camp.currentAmount / camp.targetAmount) * 100)}%` }}
                     />
                   </div>
 
-                  <div className="flex justify-between text-[9px] font-bold uppercase text-slate-400">
+                  <div className="flex justify-between text-[9px] font-bold uppercase text-slate-400 dark:text-slate-500">
                     <span>{Math.floor((camp.currentAmount / camp.targetAmount) * 100)}% Funded</span>
-                    <span className="text-indigo-700">{camp.status} Mode</span>
+                    <span className="text-indigo-700 dark:text-indigo-400">{camp.status} Mode</span>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100 text-[10px] text-slate-500">
+                <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">
                   <span>Backed by {camp.donations.length} citizens</span>
-                  <span className="font-extrabold text-indigo-600 group-hover:underline">VIEW & FUND CAMPAIGN →</span>
+                  <span className="font-extrabold text-indigo-600 dark:text-indigo-400 group-hover:underline">VIEW & FUND CAMPAIGN →</span>
                 </div>
               </motion.div>
             ))}

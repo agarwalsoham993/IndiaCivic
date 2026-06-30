@@ -260,11 +260,11 @@ export default function App() {
 
   const [userLocationName, setUserLocationName] = useState<string>("Indiranagar, Bengaluru");
   const [userWardName, setUserWardName] = useState<string>("Ward 88");
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number }>({ lat: 12.9719, lng: 77.6112 });
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocationLoading, setIsLocationLoading] = useState<boolean>(false);
   const [locationErrorMsg, setLocationErrorMsg] = useState<string>("");
 
-  const detectLocation = () => {
+  const detectLocation = (force: any = false, onSuccess?: (coords: { lat: number; lng: number }) => void) => {
     if (typeof window !== "undefined" && navigator.geolocation) {
       setIsLocationLoading(true);
       navigator.geolocation.getCurrentPosition(
@@ -272,6 +272,10 @@ export default function App() {
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
           setUserCoords({ lat, lng });
+          
+          if (onSuccess) {
+            onSuccess({ lat, lng });
+          }
           
           try {
             // Use our server-side CORS-free proxy first
@@ -323,7 +327,13 @@ export default function App() {
                 lng
               })
             });
-            loadAllData();
+            
+            // Only refresh userProfile and profiles from server
+            const resProfile = await fetch("/api/profile");
+            const dataProfile = await resProfile.json();
+            setUserProfile(dataProfile.activeUser);
+            setCitizenProfile(dataProfile.citizen);
+            setOrgProfile(dataProfile.org);
 
           } catch (err) {
             console.error("Reverse geocoding error:", err);
@@ -342,7 +352,12 @@ export default function App() {
                 lng
               })
             });
-            loadAllData();
+            
+            const resProfile = await fetch("/api/profile");
+            const dataProfile = await resProfile.json();
+            setUserProfile(dataProfile.activeUser);
+            setCitizenProfile(dataProfile.citizen);
+            setOrgProfile(dataProfile.org);
           } finally {
             setIsLocationLoading(false);
           }
@@ -358,7 +373,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    detectLocation();
+    // Always trigger location auto-detection on mount to ask the user and get their actual coordinates
+    detectLocation(true);
   }, []);
 
   useEffect(() => {
@@ -382,9 +398,23 @@ export default function App() {
       // Fetch profiles
       const resProfile = await fetch("/api/profile");
       const dataProfile = await resProfile.json();
-      setUserProfile(dataProfile.activeUser);
+      const activeUser = dataProfile.activeUser;
+      
+      setUserProfile(activeUser);
       setCitizenProfile(dataProfile.citizen);
       setOrgProfile(dataProfile.org);
+
+      if (activeUser) {
+        if (activeUser.location) {
+          setUserLocationName(activeUser.location);
+        }
+        if (activeUser.wardName) {
+          setUserWardName(activeUser.wardName);
+        }
+        if (activeUser.latitude && activeUser.longitude) {
+          setUserCoords({ lat: activeUser.latitude, lng: activeUser.longitude });
+        }
+      }
 
       // Fetch leaderboard users
       const resLeaderboard = await fetch("/api/leaderboard");
@@ -1770,6 +1800,7 @@ export default function App() {
                         currentLocationName={userLocationName}
                         currentWardName={userWardName}
                         isLocationLoading={isLocationLoading}
+                        onDetectLocation={detectLocation}
                       />
                     )}
                     {activeTab === "maps" && (
@@ -1784,6 +1815,8 @@ export default function App() {
                         theme={theme}
                         isThemeTransitioning={!!transitionOverlay}
                         userCoords={userCoords}
+                        onDetectLocation={detectLocation}
+                        isLocationLoading={isLocationLoading}
                       />
                     )}
                     {activeTab === "report" && (
@@ -1813,6 +1846,8 @@ export default function App() {
                         onToggleRole={handleToggleRole}
                         leaderboardUsers={leaderboardUsers}
                         onRefreshProfile={loadAllData}
+                        onDetectLocation={detectLocation}
+                        isLocationLoading={isLocationLoading}
                       />
                     )}
                   </motion.div>
@@ -2334,6 +2369,7 @@ export default function App() {
                     currentLocationName={userLocationName}
                     currentWardName={userWardName}
                     isLocationLoading={isLocationLoading}
+                    onDetectLocation={detectLocation}
                   />
                 )}
                 {activeTab === "maps" && (
@@ -2348,6 +2384,8 @@ export default function App() {
                     theme={theme}
                     isThemeTransitioning={!!transitionOverlay}
                     userCoords={userCoords}
+                    onDetectLocation={detectLocation}
+                    isLocationLoading={isLocationLoading}
                   />
                 )}
                 {activeTab === "report" && (
@@ -2377,6 +2415,8 @@ export default function App() {
                     onToggleRole={handleToggleRole}
                     leaderboardUsers={leaderboardUsers}
                     onRefreshProfile={loadAllData}
+                    onDetectLocation={detectLocation}
+                    isLocationLoading={isLocationLoading}
                   />
                 )}
               </motion.div>

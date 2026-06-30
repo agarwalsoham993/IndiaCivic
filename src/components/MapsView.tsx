@@ -556,6 +556,8 @@ interface MapsViewProps {
   theme?: "light" | "dark";
   isThemeTransitioning?: boolean;
   userCoords?: { lat: number; lng: number } | null;
+  onDetectLocation?: (force?: any, onSuccess?: (coords: { lat: number; lng: number }) => void) => void;
+  isLocationLoading?: boolean;
 }
 
 // Unified interface for clusters
@@ -609,7 +611,9 @@ export default function MapsView({
   setShowAuthModal,
   theme = "light",
   isThemeTransitioning = false,
-  userCoords = null
+  userCoords = null,
+  onDetectLocation,
+  isLocationLoading = false
 }: MapsViewProps) {
   const [activeTab, setActiveTab] = useState<"map" | "list">("map");
   const [severityFilter, setSeverityFilter] = useState<"all" | "high" | "med" | "low">("all");
@@ -846,8 +850,43 @@ export default function MapsView({
   };
 
   // Controlled Google Maps camera state
-  const [mapCenter, setMapCenter] = useState({ lat: 12.9719, lng: 77.6112 });
+  const [mapCenter, setMapCenter] = useState(() => {
+    if (userCoords && userCoords.lat && userCoords.lng) {
+      return { lat: userCoords.lat, lng: userCoords.lng };
+    }
+    return { lat: 12.9719, lng: 77.6112 };
+  });
   const [mapZoom, setMapZoom] = useState(13);
+
+  // Synchronize map center and active city preset when userCoords is loaded or changes
+  useEffect(() => {
+    if (userCoords && userCoords.lat && userCoords.lng) {
+      setMapCenter({ lat: userCoords.lat, lng: userCoords.lng });
+      
+      const lat = userCoords.lat;
+      const lng = userCoords.lng;
+      let targetCity: "bengaluru" | "mumbai" | "delhi" = "bengaluru";
+      
+      const distBangalore = Math.pow(lat - 12.9719, 2) + Math.pow(lng - 77.6112, 2);
+      const distMumbai = Math.pow(lat - 19.0760, 2) + Math.pow(lng - 72.8777, 2);
+      const distDelhi = Math.pow(lat - 28.6139, 2) + Math.pow(lng - 77.2090, 2);
+      
+      if (distMumbai < distBangalore && distMumbai < distDelhi) {
+        targetCity = "mumbai";
+      } else if (distDelhi < distBangalore && distDelhi < distMumbai) {
+        targetCity = "delhi";
+      }
+      
+      setActiveCity(targetCity);
+      
+      // Calculate relative pan for vector fallback map
+      const presetCenter = presets[targetCity].center;
+      const px = 500 + (lng - presetCenter.lng) * 4000;
+      const py = 500 - (lat - presetCenter.lat) * 4000;
+      setVectorPan({ x: 500 - px, y: 500 - py });
+      setVectorZoomLevel(4.5);
+    }
+  }, [userCoords]);
 
   // Auto-center and zoom out when multiple states are selected to show all reports combined
   useEffect(() => {
@@ -1461,12 +1500,47 @@ export default function MapsView({
     setSearchQuery("");
   };
 
-  // GPS tracking locator function (centers map back to default preset)
+  // GPS tracking locator function (centers map back to default preset or user's exact coordinates)
   const handleLocateMe = () => {
-    setMapCenter(currentPreset.center);
-    setMapZoom(currentPreset.zoom);
-    setVectorPan({ x: 0, y: 0 });
-    setVectorZoomLevel(3);
+    const handleCoordsFound = (coords: { lat: number; lng: number }) => {
+      const lat = coords.lat;
+      const lng = coords.lng;
+      let targetCity: "bengaluru" | "mumbai" | "delhi" = "bengaluru";
+      
+      const distBangalore = Math.pow(lat - 12.9719, 2) + Math.pow(lng - 77.6112, 2);
+      const distMumbai = Math.pow(lat - 19.0760, 2) + Math.pow(lng - 72.8777, 2);
+      const distDelhi = Math.pow(lat - 28.6139, 2) + Math.pow(lng - 77.2090, 2);
+      
+      if (distMumbai < distBangalore && distMumbai < distDelhi) {
+        targetCity = "mumbai";
+      } else if (distDelhi < distBangalore && distDelhi < distMumbai) {
+        targetCity = "delhi";
+      }
+      
+      setActiveCity(targetCity);
+      
+      // Center the map
+      setMapCenter({ lat, lng });
+      setMapZoom(15);
+      
+      // Calculate relative pan for vector fallback map
+      const presetCenter = presets[targetCity].center;
+      const px = 500 + (lng - presetCenter.lng) * 4000;
+      const py = 500 - (lat - presetCenter.lat) * 4000;
+      setVectorPan({ x: 500 - px, y: 500 - py });
+      setVectorZoomLevel(4.5);
+    };
+
+    if (onDetectLocation) {
+      onDetectLocation(true, handleCoordsFound);
+    } else if (userCoords && userCoords.lat && userCoords.lng) {
+      handleCoordsFound(userCoords);
+    } else {
+      setMapCenter(currentPreset.center);
+      setMapZoom(currentPreset.zoom);
+      setVectorPan({ x: 0, y: 0 });
+      setVectorZoomLevel(3);
+    }
   };
 
   // Drag pan handlers for vector fallback map
@@ -2481,13 +2555,15 @@ export default function MapsView({
                 <div className="absolute bottom-40 right-3.5 z-30 pointer-events-auto">
                   <button
                     onClick={handleLocateMe}
-                    className={`h-10 w-10 border rounded-xl shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all transition-colors duration-500 ${
+                    disabled={isLocationLoading}
+                    className={`h-10 w-10 border rounded-xl shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all transition-colors duration-500 disabled:opacity-60 ${
                       theme === "dark"
                         ? "bg-slate-900 border-slate-800 text-slate-300 hover:text-white"
                         : "bg-white border-slate-200 text-slate-700 hover:text-indigo-600"
                     }`}
+                    title="Recalibrate GPS & Center Map"
                   >
-                    <Compass className="h-4.5 w-4.5" />
+                    <Compass className={`h-4.5 w-4.5 ${isLocationLoading ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
                   </button>
                 </div>
 
@@ -2626,9 +2702,15 @@ export default function MapsView({
                 <div className="absolute bottom-40 right-3.5 z-30 pointer-events-auto">
                   <button
                     onClick={handleLocateMe}
-                    className="h-10 w-10 bg-white border border-slate-200 rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:text-indigo-600 cursor-pointer"
+                    disabled={isLocationLoading}
+                    className={`h-10 w-10 border rounded-xl shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all transition-colors duration-500 disabled:opacity-60 ${
+                      theme === "dark"
+                        ? "bg-slate-900 border-slate-800 text-slate-300 hover:text-white"
+                        : "bg-white border-slate-200 text-slate-700 hover:text-indigo-600"
+                    }`}
+                    title="Recalibrate GPS & Center Map"
                   >
-                    <Compass className="h-4.5 w-4.5" />
+                    <Compass className={`h-4.5 w-4.5 ${isLocationLoading ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
                   </button>
                 </div>
               </>

@@ -31,7 +31,8 @@ import {
   Check,
   Sparkles,
   Lock,
-  FileText
+  FileText,
+  Settings
 } from "lucide-react";
 import { UserProfile } from "../types";
 import { APIProvider, Map, AdvancedMarker } from "@vis.gl/react-google-maps";
@@ -70,10 +71,22 @@ interface ProfileViewProps {
   onToggleRole: (targetRole: 'CITIZEN' | 'ORGANIZATION') => void;
   leaderboardUsers?: UserProfile[];
   onRefreshProfile?: () => void;
+  onDetectLocation?: () => void;
+  isLocationLoading?: boolean;
 }
 
-export default function ProfileView({ user, citizen, org, onToggleRole, leaderboardUsers, onRefreshProfile }: ProfileViewProps) {
+export default function ProfileView({ 
+  user, 
+  citizen, 
+  org, 
+  onToggleRole, 
+  leaderboardUsers, 
+  onRefreshProfile,
+  onDetectLocation,
+  isLocationLoading
+}: ProfileViewProps) {
   const [selectedLeaderboard, setSelectedLeaderboard] = useState<"ward" | "city" | "national">("ward");
+  const [profileTab, setProfileTab] = useState<"dashboard" | "settings">("dashboard");
   const [showShareModal, setShowShareModal] = useState(false);
 
   // Precise Location selection modal states
@@ -113,10 +126,12 @@ export default function ProfileView({ user, citizen, org, onToggleRole, leaderbo
     setSearchResults([]);
     setIsEditingLocation(true);
     
-    // Attempt to seed from current user location name
-    setSelectedMarkerPos({ lat: 12.9719, lng: 77.6412 });
-    setMapCenter({ lat: 12.9719, lng: 77.6412 });
-    setMapZoom(13);
+    // Attempt to seed from current user coordinates
+    const initialLat = user.latitude || 12.9719;
+    const initialLng = user.longitude || 77.6412;
+    setSelectedMarkerPos({ lat: initialLat, lng: initialLng });
+    setMapCenter({ lat: initialLat, lng: initialLng });
+    setMapZoom(14);
   };
 
   const detectPreciseLocation = () => {
@@ -361,9 +376,145 @@ export default function ProfileView({ user, citizen, org, onToggleRole, leaderbo
 
   return (
     <div className="space-y-6 pb-24 text-left">
-      {user.role === "CITIZEN" ? (
-        // CITIZEN DASHBOARD LAYOUT
+      {/* Workspace Tabs: Separating Citizen Passport and Organization Corporate Workspace */}
+      <div className="flex bg-slate-150 dark:bg-slate-900/60 p-1 rounded-2xl border border-slate-250 dark:border-slate-800/80 max-w-sm mx-auto shadow-sm">
+        <button
+          onClick={() => setProfileTab("dashboard")}
+          className={`flex-1 py-2 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer border-none flex items-center justify-center space-x-1.5 ${
+            profileTab === "dashboard"
+              ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-transparent font-extrabold"
+          }`}
+        >
+          {user.role === "ORGANIZATION" ? (
+            <>
+              <Building className="h-3.5 w-3.5" />
+              <span>Org Workspace</span>
+            </>
+          ) : (
+            <>
+              <User className="h-3.5 w-3.5" />
+              <span>Citizen Passport</span>
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => setProfileTab("settings")}
+          className={`flex-1 py-2 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer border-none flex items-center justify-center space-x-1.5 ${
+            profileTab === "settings"
+              ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-transparent font-extrabold"
+          }`}
+        >
+          <Settings className="h-3.5 w-3.5" />
+          <span>Account Settings</span>
+        </button>
+      </div>
+
+      {profileTab === "settings" ? (
+        // ACCOUNT SETTINGS VIEW WITH OPTION TO CONVERT ACCOUNT TYPES
         <div className="space-y-6">
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 p-6 sm:p-8 space-y-6 shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" />
+            
+            <div>
+              <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">Account Settings</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 font-bold">Manage localized credentials and cross-account type conversions</p>
+            </div>
+
+            {/* Profile Avatar & Info Card */}
+            <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-850/40 border border-slate-200 dark:border-slate-800/80">
+              <img 
+                src={user.avatar || undefined} 
+                alt={user.name}
+                referrerPolicy="no-referrer"
+                className="h-14 w-14 rounded-full object-cover border-2 border-indigo-500 dark:border-indigo-400"
+              />
+              <div>
+                <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{user.name}</h4>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="uppercase text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-650 dark:text-slate-300">
+                    {user.role} ACCOUNT
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-450">ID: {user.id.substring(0, 12)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Unified Location Settings Card */}
+            <div className="space-y-3.5 p-5 rounded-2xl bg-slate-50 dark:bg-slate-850/40 border border-slate-200 dark:border-slate-800/80">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <MapPin className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  <h5 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">Registered Geographic Pin</h5>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenLocationModal}
+                  className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider cursor-pointer transition-colors"
+                >
+                  Adjust Map Pin
+                </button>
+              </div>
+
+              <div className="space-y-2 pt-1 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-800/60 text-slate-650 dark:text-slate-400">
+                  <span className="font-extrabold">Geographic Area</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-100 text-right">{user.location || "Indiranagar, Bengaluru"}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-800/60 text-slate-650 dark:text-slate-400">
+                  <span className="font-extrabold">Electoral Ward</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-100">{user.wardName || "Ward 88"}</span>
+                </div>
+                <div className="flex justify-between py-1 text-slate-650 dark:text-slate-400">
+                  <span className="font-extrabold">GPS Coordinates</span>
+                  <span className="font-mono text-[10.5px] font-black text-slate-800 dark:text-slate-100">
+                    {user.latitude ? user.latitude.toFixed(5) : "12.9719"}°N, {user.longitude ? user.longitude.toFixed(5) : "77.6412"}°E
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Account Conversion Card */}
+            <div className="space-y-4 p-5 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400 animate-pulse" />
+                <h5 className="text-xs font-black text-indigo-950 dark:text-indigo-400 uppercase tracking-wider">
+                  {user.role === "CITIZEN" ? "Convert Account to Organization Workspace" : "Revert Account to Citizen Profile"}
+                </h5>
+              </div>
+
+              <p className="text-[11.5px] text-indigo-850 dark:text-indigo-300 leading-relaxed font-semibold">
+                {user.role === "CITIZEN" 
+                  ? "NGO, Corporate CSR Lead, or RWA representative? Upgrade your account to convert it into a verified Organization account. This completely transitions your dashboard into the Corporate NGO Workspace where you can adopt local municipal wards, manage high-impact crowdfunding, and claim verified carbon credits."
+                  : "Convert this enterprise profile back into a standard Citizen account. This will restore your standard Citizen Passport dashboard, local leaderboard standings, and community gamified points tracker."
+                }
+              </p>
+
+              <button
+                type="button"
+                onClick={() => onToggleRole(user.role === "CITIZEN" ? "ORGANIZATION" : "CITIZEN")}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2"
+              >
+                {user.role === "CITIZEN" ? (
+                  <>
+                    <Building className="h-4 w-4" />
+                    <span>Convert Account into Organization Account</span>
+                  </>
+                ) : (
+                  <>
+                    <User className="h-4 w-4" />
+                    <span>Convert Account to Citizen Account</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        user.role === "CITIZEN" ? (
+          // CITIZEN DASHBOARD LAYOUT
+          <div className="space-y-6">
           
           {/* User badge metadata [Focused element CSS selector 2] */}
           <div className="flex flex-col items-center text-center space-y-4 p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg relative overflow-hidden transition-all duration-300">
@@ -392,18 +543,30 @@ export default function ProfileView({ user, citizen, org, onToggleRole, leaderbo
                 )}
               </div>
               
-              <button 
-                type="button"
-                onClick={handleOpenLocationModal}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 dark:bg-slate-800/50 dark:hover:bg-indigo-950/30 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-200 dark:hover:border-indigo-900/60 rounded-full transition-colors group cursor-pointer"
-                title="Change precise location on map"
-              >
-                <MapPin className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 animate-pulse" />
-                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
-                  {user.location || "Change Location"}
-                </span>
-                <span className="text-[9px] text-slate-400 font-semibold group-hover:text-indigo-500 pl-0.5">(Edit)</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={onDetectLocation}
+                  disabled={isLocationLoading}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 dark:bg-slate-800/50 dark:hover:bg-indigo-950/30 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-200 dark:hover:border-indigo-900/60 rounded-full transition-colors group cursor-pointer active:scale-95 disabled:opacity-70"
+                  title="Click to automatically recalibrate location using high-accuracy GPS"
+                >
+                  <MapPin className={`h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 ${isLocationLoading ? 'animate-spin text-indigo-600' : 'animate-pulse'}`} />
+                  <span className="text-xs text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
+                    {isLocationLoading ? "Recalibrating GPS..." : (user.location || "Recalibrate GPS")}
+                  </span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold normal-case pl-0.5">(Recalibrate)</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={handleOpenLocationModal}
+                  className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-extrabold uppercase shrink-0"
+                  title="Manually set precise location on map"
+                >
+                  Map Pin
+                </button>
+              </div>
             </div>
 
             {/* Verification & Civic Info line */}
@@ -639,18 +802,30 @@ export default function ProfileView({ user, citizen, org, onToggleRole, leaderbo
                 )}
               </div>
               
-              <button 
-                type="button"
-                onClick={handleOpenLocationModal}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 dark:bg-slate-800/50 dark:hover:bg-emerald-950/30 border border-slate-200 dark:border-slate-700/80 hover:border-emerald-200 dark:hover:border-emerald-900/60 rounded-full transition-colors group cursor-pointer"
-                title="Change precise location on map"
-              >
-                <MapPin className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 animate-pulse" />
-                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider group-hover:text-emerald-700 dark:group-hover:text-emerald-300">
-                  {user.location || "Change Location"}
-                </span>
-                <span className="text-[9px] text-slate-400 font-semibold group-hover:text-emerald-500 pl-0.5">(Edit)</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={onDetectLocation}
+                  disabled={isLocationLoading}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 dark:bg-slate-800/50 dark:hover:bg-emerald-950/30 border border-slate-200 dark:border-slate-700/80 hover:border-emerald-200 dark:hover:border-emerald-900/60 rounded-full transition-colors group cursor-pointer active:scale-95 disabled:opacity-70"
+                  title="Click to automatically recalibrate location using high-accuracy GPS"
+                >
+                  <MapPin className={`h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 ${isLocationLoading ? 'animate-spin text-emerald-600' : 'animate-pulse'}`} />
+                  <span className="text-xs text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider group-hover:text-emerald-700 dark:group-hover:text-emerald-300">
+                    {isLocationLoading ? "Recalibrating GPS..." : (user.location || "Recalibrate GPS")}
+                  </span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold normal-case pl-0.5">(Recalibrate)</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={handleOpenLocationModal}
+                  className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-extrabold uppercase shrink-0"
+                  title="Manually set precise location on map"
+                >
+                  Map Pin
+                </button>
+              </div>
             </div>
 
             {/* Verification and Public Trust Badge */}
@@ -754,6 +929,7 @@ export default function ProfileView({ user, citizen, org, onToggleRole, leaderbo
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* Shareable Impact Card Popup Modal */}
