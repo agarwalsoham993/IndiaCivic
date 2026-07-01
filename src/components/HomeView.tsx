@@ -125,19 +125,19 @@ export default function HomeView({
   return (
     <div className="space-y-6 pb-24 text-left max-w-7xl mx-auto">
       {/* Location and Header (Mobile only) */}
-      <div className="flex items-center justify-between gap-1 sm:gap-2.5 lg:hidden w-full px-1">
+      <div className="flex items-center justify-between gap-1 sm:gap-2 w-full px-1 min-h-[44px]">
         <div 
           onClick={onDetectLocation}
           title="Click to trigger location detector"
-          className="flex items-center space-x-2 min-w-0 flex-1 cursor-pointer hover:opacity-90 active:scale-98 transition-all"
+          className="flex items-center space-x-2 min-w-0 flex-1 cursor-pointer hover:opacity-90 active:scale-95 transition-all"
         >
-          <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 shrink-0">
-            <MapPin className={`h-4 w-4 sm:h-5 sm:w-5 text-indigo-600 dark:text-indigo-400 ${isLocationLoading ? 'animate-spin' : 'animate-pulse'}`} />
+          <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 shrink-0 flex items-center justify-center">
+            <MapPin className={`h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400 ${isLocationLoading ? 'animate-spin' : ''}`} />
           </div>
-          <div className="min-w-0">
-            <div className="text-[9px] sm:text-xs text-slate-400 dark:text-slate-500 font-bold tracking-wider uppercase leading-none mb-0.5 flex items-center gap-1">
-              <span>CURRENT LOCATION</span>
-              <span className="text-[8px] text-indigo-500 dark:text-indigo-400 font-extrabold normal-case">(Click to trigger detector)</span>
+          <div className="min-w-0 flex-1 flex flex-col justify-center">
+            <div className="text-[9px] text-slate-400 dark:text-slate-500 font-bold tracking-wider uppercase leading-none mb-0.5 flex items-center gap-1">
+              <span className="whitespace-nowrap">CURRENT LOCATION</span>
+              <span className="text-[8px] text-indigo-500 dark:text-indigo-400 font-extrabold normal-case whitespace-nowrap hidden sm:inline">(Tap to detect)</span>
             </div>
             <div className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200 leading-tight truncate">
               {isLocationLoading ? (
@@ -149,32 +149,19 @@ export default function HomeView({
           </div>
         </div>
         
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <span className="px-2 py-1 text-[9px] sm:text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-100 dark:border-indigo-900/50 font-sans font-bold whitespace-nowrap">
-            {currentWardName || "Ward 88"}
-          </span>
-          
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Notifications */}
           <button 
             onClick={onOpenNotifications}
-            className="relative p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer bg-transparent shrink-0"
+            className="relative h-9 w-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center shrink-0"
           >
-            <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Bell className="h-4.5 w-4.5" />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </button>
-          
-          {/* Points Bubble styled exactly like Screenshot 2 with large score and smaller XP label */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 shrink-0 select-none">
-            <Award className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <div className="flex flex-col text-left leading-none">
-              <span className="text-xs font-black">{user.civicScore}</span>
-              <span className="text-[8px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">XP</span>
-            </div>
-          </div>
         </div>
       </div>
 

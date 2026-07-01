@@ -693,10 +693,14 @@ export default function ProfileView({
 
             {/* Verification & Civic Info line */}
             <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1 z-10">
-              <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-black shadow-xs">
-                CIVIC SCORE: {user.civicScore}
-              </span>
-              <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-400 rounded-full text-xs font-extrabold flex items-center shadow-xs">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/50 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 shadow-xs select-none">
+                <Award className="h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <div className="flex flex-col text-left leading-none justify-center">
+                  <span className="text-sm font-black leading-none">{user.civicScore}</span>
+                  <span className="text-[8px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider mt-0.5 leading-none">CIVIC XP</span>
+                </div>
+              </div>
+              <span className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-400 rounded-2xl text-xs font-extrabold flex items-center shadow-xs">
                 Top {percentile}% Ward Rank
               </span>
               {renderVerificationStatusBadge()}
