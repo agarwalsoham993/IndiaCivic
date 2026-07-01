@@ -68,7 +68,7 @@ const DARK_MAP_STYLE = [
 interface ProfileViewProps {
   user: UserProfile;
   citizen: UserProfile;
-  org: UserProfile;
+  org: UserProfile | null;
   onToggleRole: (targetRole: 'CITIZEN' | 'ORGANIZATION') => void;
   leaderboardUsers?: UserProfile[];
   onRefreshProfile?: () => void;
@@ -90,6 +90,58 @@ export default function ProfileView({
   const [profileTab, setProfileTab] = useState<"dashboard" | "settings">("dashboard");
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareBtnText, setShareBtnText] = useState("Download & Share on WhatsApp");
+
+  // Organization creation states
+  const [showOrgCreateForm, setShowOrgCreateForm] = useState(false);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgDescription, setNewOrgDescription] = useState("");
+  const [newOrgLocation, setNewOrgLocation] = useState(user.location || "Indiranagar, Bengaluru");
+  const [newOrgWard, setNewOrgWard] = useState(user.wardName || "Ward 88 (Indiranagar)");
+  const [isCreatingOrg, setIsCreatingOrg] = useState(false);
+  const [createOrgError, setCreateOrgError] = useState("");
+
+  const handleCreateOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOrgName.trim()) {
+      setCreateOrgError("Please enter an Organization Name");
+      return;
+    }
+    setIsCreatingOrg(true);
+    setCreateOrgError("");
+    try {
+      const res = await fetch("/api/profile/create-org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: user.id,
+          orgName: newOrgName,
+          orgDescription: newOrgDescription,
+          location: newOrgLocation,
+          wardName: newOrgWard,
+          lat: user.latitude,
+          lng: user.longitude
+        })
+      });
+      if (!res.ok) {
+        throw new Error("Failed to create organization profile on backend");
+      }
+      const data = await res.json();
+      if (data.success) {
+        if (onRefreshProfile) {
+          onRefreshProfile();
+        }
+        setShowOrgCreateForm(false);
+        onToggleRole("ORGANIZATION");
+      } else {
+        setCreateOrgError(data.error || "Failed to create organization profile");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setCreateOrgError(err.message || "An unexpected error occurred");
+    } finally {
+      setIsCreatingOrg(false);
+    }
+  };
 
   // WhatsApp states
   const [whatsappHandshakeCode, setWhatsappHandshakeCode] = useState<string | null>(null);
@@ -602,34 +654,140 @@ export default function ProfileView({
               <div className="flex items-center space-x-2">
                 <Sparkles className="h-4.5 w-4.5 text-indigo-600 dark:text-indigo-400 animate-pulse" />
                 <h5 className="text-xs font-black text-indigo-950 dark:text-indigo-400 uppercase tracking-wider">
-                  {user.role === "CITIZEN" ? "Convert Account to Organization Workspace" : "Revert Account to Citizen Profile"}
+                  {user.role === "CITIZEN" 
+                    ? (org ? "Switch Workspace Profile" : "Register Organization Workspace") 
+                    : "Switch Workspace Profile"
+                  }
                 </h5>
               </div>
 
-              <p className="text-[11.5px] text-indigo-850 dark:text-indigo-300 leading-relaxed font-semibold">
-                {user.role === "CITIZEN" 
-                  ? "NGO, Corporate CSR Lead, or RWA representative? Upgrade your account to convert it into a verified Organization account. This completely transitions your dashboard into the Corporate NGO Workspace where you can adopt local municipal wards, manage high-impact crowdfunding, and claim verified carbon credits."
-                  : "Convert this enterprise profile back into a standard Citizen account. This will restore your standard Citizen Passport dashboard, local leaderboard standings, and community gamified points tracker."
-                }
-              </p>
-
-              <button
-                type="button"
-                onClick={() => onToggleRole(user.role === "CITIZEN" ? "ORGANIZATION" : "CITIZEN")}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2"
-              >
-                {user.role === "CITIZEN" ? (
-                  <>
-                    <Building className="h-4 w-4" />
-                    <span>Convert Account into Organization Account</span>
-                  </>
+              {user.role === "CITIZEN" ? (
+                org ? (
+                  <div className="space-y-3">
+                    <p className="text-[11.5px] text-indigo-850 dark:text-indigo-300 leading-relaxed font-semibold">
+                      You are currently active on your **Citizen Passport**. Switch over to your registered Organization workspace (**{org.name}**) to manage crowdfunding campaigns, verify civic issues, and claim carbon credits.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onToggleRole("ORGANIZATION")}
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2"
+                    >
+                      <Building className="h-4 w-4" />
+                      <span>Switch to Organization View ({org.name})</span>
+                    </button>
+                  </div>
                 ) : (
-                  <>
+                  showOrgCreateForm ? (
+                    <form onSubmit={handleCreateOrg} className="space-y-3.5">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Register a real organization profile. This creates an independent profile tied to your citizen identity.
+                      </p>
+
+                      {createOrgError && (
+                        <div className="p-2.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 text-xs rounded-xl font-bold">
+                          {createOrgError}
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Organization Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newOrgName}
+                          onChange={(e) => setNewOrgName(e.target.value)}
+                          placeholder="e.g. Clean Bengaluru Foundation"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Mission Statement / Focus Area</label>
+                        <textarea
+                          value={newOrgDescription}
+                          onChange={(e) => setNewOrgDescription(e.target.value)}
+                          placeholder="e.g. Active in municipal hygiene, smart waste sorting, and public park upkeep..."
+                          rows={2}
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Location</label>
+                          <input
+                            type="text"
+                            value={newOrgLocation}
+                            onChange={(e) => setNewOrgLocation(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Ward Name</label>
+                          <input
+                            type="text"
+                            value={newOrgWard}
+                            onChange={(e) => setNewOrgWard(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowOrgCreateForm(false)}
+                          className="w-1/3 py-2 px-3 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] uppercase rounded-xl tracking-wider transition-all cursor-pointer bg-transparent"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isCreatingOrg}
+                          className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase rounded-xl tracking-wider transition-all flex items-center justify-center space-x-1 shadow cursor-pointer border-none"
+                        >
+                          {isCreatingOrg ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Creating...</span>
+                            </>
+                          ) : (
+                            <span>Create Organization</span>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-[11.5px] text-indigo-850 dark:text-indigo-300 leading-relaxed font-semibold">
+                        Are you an NGO, Corporate CSR Lead, or RWA representative? Register an Organization profile. This creates a dedicated dashboard to adopt local municipal wards, manage high-impact crowdfunding, and verify local issues.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowOrgCreateForm(true)}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2"
+                      >
+                        <Building className="h-4 w-4" />
+                        <span>Register Organization Profile</span>
+                      </button>
+                    </div>
+                  )
+                )
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-[11.5px] text-indigo-850 dark:text-indigo-300 leading-relaxed font-semibold">
+                    You are currently active on your **Organization Workspace**. Switch back to your personal **Citizen Passport** profile to report local complaints, participate in release votes, and manage your resident's leaderboard standings.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onToggleRole("CITIZEN")}
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center space-x-2"
+                  >
                     <User className="h-4 w-4" />
-                    <span>Convert Account to Citizen Account</span>
-                  </>
-                )}
-              </button>
+                    <span>Switch to Citizen View ({citizen.name})</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -707,15 +865,17 @@ export default function ProfileView({
             </div>
 
             {/* Quick Toggle Role Button inside layout */}
-            <div className="w-full max-w-xs pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-2 z-10">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase">Switch Workspace:</span>
-              <button
-                onClick={() => onToggleRole("ORGANIZATION")}
-                className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition-all border-none"
-              >
-                Organization View →
-              </button>
-            </div>
+            {org && (
+              <div className="w-full max-w-xs pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-2 z-10">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase">Switch Workspace:</span>
+                <button
+                  onClick={() => onToggleRole("ORGANIZATION")}
+                  className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition-all border-none"
+                >
+                  Organization View →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Gamified Core Stat Badges */}

@@ -692,9 +692,13 @@ export default function App() {
         body: JSON.stringify({ targetRole })
       });
       const data = await response.json();
-      if (data.success) {
+      if (response.ok && data.success) {
         setUserProfile(data.activeUser);
+        if (data.citizen) setCitizenProfile(data.citizen);
+        setOrgProfile(data.org || null);
         fetchLeaderboard();
+      } else {
+        console.error("Failed to toggle role:", data.error || "Unknown error");
       }
     } catch (err) {
       console.error(err);
@@ -2224,7 +2228,7 @@ export default function App() {
                       <ProfileView 
                         user={userProfile || DEFAULT_USER}
                         citizen={citizenProfile || DEFAULT_USER}
-                        org={orgProfile || DEFAULT_ORG}
+                        org={orgProfile}
                         onToggleRole={handleToggleRole}
                         leaderboardUsers={leaderboardUsers}
                         onRefreshProfile={fetchLeaderboard}
@@ -2795,7 +2799,7 @@ export default function App() {
                   <ProfileView 
                     user={userProfile || DEFAULT_USER}
                     citizen={citizenProfile || DEFAULT_USER}
-                    org={orgProfile || DEFAULT_ORG}
+                    org={orgProfile}
                     onToggleRole={handleToggleRole}
                     leaderboardUsers={leaderboardUsers}
                     onRefreshProfile={fetchLeaderboard}

@@ -139,7 +139,7 @@ function loadLocalDatabase(): DbSchema {
     campaigns: INITIAL_CAMPAIGNS,
     activeUserProfile: DEFAULT_USER,
     citizenProfile: DEFAULT_USER,
-    orgProfile: DEFAULT_ORG,
+    orgProfile: null,
     profiles: {},
     whatsappConversations: {},
     whatsappVerificationTokens: {},
@@ -684,7 +684,7 @@ interface DbSchema {
   campaigns: Campaign[];
   activeUserProfile: UserProfile;
   citizenProfile: UserProfile;
-  orgProfile: UserProfile;
+  orgProfile: UserProfile | null;
   profiles?: { [uid: string]: UserProfile };
   whatsappConversations?: { [phone: string]: any };
   whatsappVerificationTokens?: { [token: string]: any };
@@ -726,7 +726,7 @@ async function getDb(): Promise<DbSchema> {
 
     const activeUserProfile = profilesDict["activeUserProfile"] || DEFAULT_USER;
     const citizenProfile = profilesDict["citizenProfile"] || DEFAULT_USER;
-    const orgProfile = profilesDict["orgProfile"] || DEFAULT_ORG;
+    const orgProfile = profilesDict["orgProfile"] || null;
 
     const localDb = loadLocalDatabase();
     const data: DbSchema = {
@@ -765,7 +765,9 @@ async function saveDb(targetDb: DbSchema) {
     // Save profiles in Firestore
     await setDoc(doc(firestore, "profiles", "activeUserProfile"), targetDb.activeUserProfile);
     await setDoc(doc(firestore, "profiles", "citizenProfile"), targetDb.citizenProfile);
-    await setDoc(doc(firestore, "profiles", "orgProfile"), targetDb.orgProfile);
+    if (targetDb.orgProfile) {
+      await setDoc(doc(firestore, "profiles", "orgProfile"), targetDb.orgProfile);
+    }
     if (targetDb.profiles) {
       for (const [uid, profile] of Object.entries(targetDb.profiles)) {
         await setDoc(doc(firestore, "profiles", uid), profile);
@@ -2017,11 +2019,15 @@ app.post("/api/profile/toggle", (req, res) => {
   if (targetRole === "CITIZEN") {
     db.activeUserProfile = db.citizenProfile;
   } else if (targetRole === "ORGANIZATION") {
-    db.activeUserProfile = db.orgProfile;
+    if (db.orgProfile) {
+      db.activeUserProfile = db.orgProfile;
+    } else {
+      return res.status(400).json({ error: "No organization registered. Please create one in Settings." });
+    }
   }
 
   saveDatabase(db);
-  res.json({ success: true, activeUser: db.activeUserProfile });
+  res.json({ success: true, activeUser: db.activeUserProfile, citizen: db.citizenProfile, org: db.orgProfile });
 });
 
 // Update profile location (syncs in-memory and to Firestore for persistent accounts)
@@ -2154,7 +2160,13 @@ const loginSchema = z.object({
   uid: z.string().min(1),
   email: z.string().email().optional().nullable(),
   name: z.string().optional().nullable(),
-  role: z.enum(["CITIZEN", "ORGANIZATION"]).optional().nullable()
+  role: z.enum(["CITIZEN", "ORGANIZATION"]).optional().nullable(),
+  orgName: z.string().optional().nullable(),
+  orgDescription: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  wardName: z.string().optional().nullable(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable()
 });
 
 // Sync Firebase authenticated user profile to Firestore database
@@ -2165,31 +2177,28 @@ app.post("/api/profile/login", async (req, res) => {
     return res.status(400).json({ error: "Validation failed", details: parsed.error.format() });
   }
   
-  const { uid, email, name, role } = parsed.data;
+  const { uid, email, name, role, orgName, orgDescription, location, wardName, latitude, longitude } = parsed.data;
 
   try {
-    const profileRef = doc(firestore, "profiles", uid);
-    const profileSnap = await getDoc(profileRef);
-    
-    let userProfile: UserProfile;
-    const targetRole = role || "CITIZEN";
+    // 1. Citizen Profile (At profiles/${uid})
+    const citizenRef = doc(firestore, "profiles", uid);
+    const citizenSnap = await getDoc(citizenRef);
+    let citizenProfile: UserProfile;
 
-    if (profileSnap.exists()) {
-      userProfile = profileSnap.data() as UserProfile;
-      // Enforce anonymous username if they are a citizen and don't have one
-      if (userProfile.role === "CITIZEN" && (!userProfile.name || userProfile.name === "Guest Neighbour" || userProfile.name.includes("@"))) {
-        userProfile.name = generateRandomUsername();
-        await setDoc(profileRef, userProfile);
+    if (citizenSnap.exists()) {
+      citizenProfile = citizenSnap.data() as UserProfile;
+      if (!citizenProfile.name || citizenProfile.name === "Guest Neighbour" || citizenProfile.name.includes("@")) {
+        citizenProfile.name = name || generateRandomUsername();
+        await setDoc(citizenRef, citizenProfile);
       }
     } else {
-      // Create new profile with random username if citizen to preserve anonymity
-      const anonymousName = targetRole === "CITIZEN" ? generateRandomUsername() : (name || email?.split("@")[0] || "Citizen");
-      userProfile = {
+      const personalName = name || generateRandomUsername();
+      citizenProfile = {
         id: uid,
-        name: anonymousName,
+        name: personalName,
         avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${uid}`,
-        location: "Indiranagar, Bengaluru",
-        role: targetRole,
+        location: location || "Indiranagar, Bengaluru",
+        role: "CITIZEN",
         civicScore: 700,
         totalPoints: 100,
         personalActiveScore: 50,
@@ -2201,39 +2210,154 @@ app.post("/api/profile/login", async (req, res) => {
           verifying: 0,
           donating: 0,
         },
-        badges: ["New Citizen"],
+        badges: ["New Citizen", "Onboarded"],
         streakDays: 1,
-        availableFunds: 5000, // Seeding wallet for testing out features
-        wardName: "Ward 88",
-        latitude: 12.9719,
-        longitude: 77.6412,
+        availableFunds: 5000,
+        wardName: wardName || "Ward 88 (Indiranagar)",
+        latitude: latitude || 12.9719,
+        longitude: longitude || 77.6412,
       };
-      await setDoc(profileRef, userProfile);
+      await setDoc(citizenRef, citizenProfile);
     }
 
-    db.activeUserProfile = userProfile;
-    if (userProfile.role === "CITIZEN") {
-      db.citizenProfile = userProfile;
+    // 2. Organization Profile (At profiles/${uid}_org)
+    const orgRef = doc(firestore, "profiles", uid + "_org");
+    const orgSnap = await getDoc(orgRef);
+    let orgProfile: UserProfile | null = null;
+
+    if (orgSnap.exists()) {
+      orgProfile = orgSnap.data() as UserProfile;
+    } else if (role === "ORGANIZATION" && orgName && orgName.trim()) {
+      // Create Organization Profile since they onboarded as an Organization!
+      orgProfile = {
+        id: uid + "_org",
+        name: orgName.trim(),
+        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(orgName)}`,
+        location: location || "Indiranagar, Bengaluru",
+        role: "ORGANIZATION",
+        civicScore: 700,
+        totalPoints: 100,
+        personalActiveScore: 50,
+        contributionCount: 0,
+        citizensHelped: 0,
+        totalDonations: 0,
+        pointsBreakdown: {
+          reporting: 0,
+          verifying: 0,
+          donating: 0,
+        },
+        badges: ["New Organization"],
+        streakDays: 1,
+        availableFunds: 5000,
+        wardName: wardName || "Ward 88 (Indiranagar)",
+        latitude: latitude || 12.9719,
+        longitude: longitude || 77.6412,
+        isVerified: false,
+        adoptedWards: [wardName || "Ward 88 (Indiranagar)"],
+        carbonCredits: 0
+      };
+      await setDoc(orgRef, orgProfile);
+    }
+
+    db.citizenProfile = citizenProfile;
+    db.orgProfile = orgProfile;
+
+    if (role === "ORGANIZATION" && orgProfile) {
+      db.activeUserProfile = orgProfile;
     } else {
-      db.orgProfile = userProfile;
+      db.activeUserProfile = citizenProfile;
     }
     
     if (!db.profiles) {
       db.profiles = {};
     }
-    db.profiles[uid] = userProfile;
+    db.profiles[uid] = citizenProfile;
+    if (orgProfile) {
+      db.profiles[uid + "_org"] = orgProfile;
+    }
 
     saveDatabase(db);
     
     res.json({ 
       success: true, 
-      activeUser: userProfile, 
+      activeUser: db.activeUserProfile, 
       citizen: db.citizenProfile, 
       org: db.orgProfile 
     });
   } catch (err) {
     console.error("Error logging in / syncing profile in backend:", err);
     res.status(500).json({ error: "Failed to login/sync profile" });
+  }
+});
+
+// Create brand new Organization profile and switch active workspace
+app.post("/api/profile/create-org", async (req, res) => {
+  db = loadDatabase();
+  const { uid, orgName, orgDescription, location, wardName, lat, lng } = req.body;
+
+  if (!uid) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+  if (!orgName || !orgName.trim()) {
+    return res.status(400).json({ error: "Organization Name is required" });
+  }
+
+  try {
+    const orgProfile: UserProfile = {
+      id: uid + "_org",
+      name: orgName.trim(),
+      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(orgName)}`,
+      location: location || "Indiranagar, Bengaluru",
+      role: "ORGANIZATION",
+      civicScore: 700,
+      totalPoints: 100,
+      personalActiveScore: 50,
+      contributionCount: 0,
+      citizensHelped: 0,
+      totalDonations: 0,
+      pointsBreakdown: {
+        reporting: 0,
+        verifying: 0,
+        donating: 0,
+      },
+      badges: ["New Organization"],
+      streakDays: 1,
+      availableFunds: 5000,
+      wardName: wardName || "Ward 88 (Indiranagar)",
+      latitude: lat || 12.9719,
+      longitude: lng || 77.6412,
+      isVerified: false,
+      adoptedWards: [wardName || "Ward 88 (Indiranagar)"],
+      carbonCredits: 0
+    };
+
+    // Save to Firestore
+    const orgRef = doc(firestore, "profiles", uid + "_org");
+    await setDoc(orgRef, orgProfile);
+
+    // Save in server db
+    db.orgProfile = orgProfile;
+    db.activeUserProfile = orgProfile;
+    if (!db.profiles) {
+      db.profiles = {};
+    }
+    db.profiles[uid + "_org"] = orgProfile;
+
+    // Sync global activeUserProfile/orgProfile documents
+    await setDoc(doc(firestore, "profiles", "orgProfile"), orgProfile);
+    await setDoc(doc(firestore, "profiles", "activeUserProfile"), orgProfile);
+
+    saveDatabase(db);
+
+    res.json({
+      success: true,
+      activeUser: orgProfile,
+      citizen: db.citizenProfile,
+      org: orgProfile
+    });
+  } catch (err) {
+    console.error("Error creating organization profile:", err);
+    res.status(500).json({ error: "Failed to create organization profile" });
   }
 });
 

@@ -16,6 +16,8 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
   const [step, setStep] = useState<number>(1);
   const [name, setName] = useState<string>(initialName || "");
   const [role, setRole] = useState<"CITIZEN" | "ORGANIZATION">("CITIZEN");
+  const [orgName, setOrgName] = useState<string>("");
+  const [orgDescription, setOrgDescription] = useState<string>("");
   const [avatar, setAvatar] = useState<string>(`https://api.dicebear.com/7.x/bottts/svg?seed=${uid}`);
   
   // Location states
@@ -130,6 +132,11 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
       setStep(1);
       return;
     }
+    if (role === "ORGANIZATION" && !orgName.trim()) {
+      setGeneralError("Please enter your Organization Name.");
+      setStep(2);
+      return;
+    }
     setIsSaving(true);
     setGeneralError("");
     
@@ -138,7 +145,7 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
       name: name.trim(),
       avatar: avatar,
       location: detectedLocation,
-      role: role,
+      role: "CITIZEN", // Citizen is always created as the base profile
       civicScore: 700, // standard Starting Score
       totalPoints: 100, // onboarding reward
       personalActiveScore: 50,
@@ -172,6 +179,8 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
           email: email,
           name: name,
           role: role,
+          orgName: role === "ORGANIZATION" ? orgName : undefined,
+          orgDescription: role === "ORGANIZATION" ? orgDescription : undefined,
           wardName: detectedWard,
           latitude: lat,
           longitude: lng,
@@ -188,7 +197,7 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
         throw new Error(resData.error || "Failed to register session with server.");
       }
 
-      onComplete(initialProfile);
+      onComplete(resData.activeUser);
     } catch (err: any) {
       console.error("Error completing onboarding:", err);
       setGeneralError("Failed to save profile. Please try again.");
@@ -310,6 +319,38 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
                   </button>
                 </div>
 
+                {role === "ORGANIZATION" && (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3.5 animate-fadeIn">
+                    <div className="flex items-center space-x-1.5 text-emerald-800 dark:text-emerald-400">
+                      <Sparkles className="h-4 w-4 text-emerald-600 animate-pulse" />
+                      <span className="text-[11px] font-black uppercase tracking-wider">Organization Details</span>
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-extrabold text-slate-450 uppercase tracking-wider block">Organization Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        placeholder="e.g. Green Ward Foundation"
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-extrabold text-slate-450 uppercase tracking-wider block">Mission / Primary Focus Area</label>
+                      <textarea
+                        value={orgDescription}
+                        onChange={(e) => setOrgDescription(e.target.value)}
+                        placeholder="e.g. Active in municipal waste management, citizen awareness, and park rejuvenation..."
+                        rows={2}
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex space-x-3 pt-2">
                   <button
                     type="button"
@@ -320,7 +361,14 @@ export default function OnboardingWizard({ uid, email, initialName, onComplete }
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStep(3)}
+                    onClick={() => {
+                      if (role === "ORGANIZATION" && !orgName.trim()) {
+                        setGeneralError("Please enter your Organization Name.");
+                        return;
+                      }
+                      setGeneralError("");
+                      setStep(3);
+                    }}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase rounded-xl tracking-wider cursor-pointer flex items-center justify-center space-x-1 shadow-md active:scale-95 transition-all"
                   >
                     <span>Continue</span>
